@@ -66,6 +66,23 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun rejectsNonAsciiDnsNamesInsteadOfSilentlyReplacingCharacters() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.buildQuery("café.example", 1)
+        }
+    }
+
+    @Test
+    fun rejectsDnsNamesLongerThan255WireBytes() {
+        val label = "a".repeat(63)
+        val overlongName = listOf(label, label, label, label).joinToString(".")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.buildQuery(overlongName, 1)
+        }
+    }
+
 
     @Test
     fun identifiesNxDomainAsDnsError() {
