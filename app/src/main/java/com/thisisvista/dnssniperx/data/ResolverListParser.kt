@@ -40,7 +40,8 @@ object ResolverListParser {
         } else {
             address = endpoint
             port = 53
-            if (!isIpv4(address) && !isIpv6(address) && !hostnamePattern.matches(address)) return null
+            if (!isIpv4(address) && !isIpv6(address) &&
+                (!hostnamePattern.matches(address) || address.matches(Regex("^[0-9.]+$")))) return null
         }
 
         if (port !in 1..65535) return null
