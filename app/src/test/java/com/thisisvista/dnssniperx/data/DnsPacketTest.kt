@@ -103,6 +103,33 @@ class DnsPacketTest {
         assertEquals("TRUNCATED", result.status)
     }
 
+
+    @Test
+    fun reportsEdnsWhenServerReturnsOptRecord() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        org.junit.Assert.assertTrue(result.detail.contains("EDNS supported"))
+        org.junit.Assert.assertTrue(result.detail.contains("1232 bytes"))
+    }
+
+    @Test
+    fun reportsWhenServerDoesNotAdvertiseEdns() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[11] = 0
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        org.junit.Assert.assertTrue(result.detail.contains("EDNS not advertised"))
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
