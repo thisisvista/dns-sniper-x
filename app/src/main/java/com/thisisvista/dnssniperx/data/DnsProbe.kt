@@ -26,6 +26,7 @@ object DnsProbe {
     private const val MAX_PARALLEL_RESOLVERS = 8
     private const val MAX_BATCH_SIZE = 500
     private const val TEST_NAME = "example.com"
+    private const val NXDOMAIN_TEST_SUFFIX = "dns-sniperx-check.invalid"
 
     suspend fun scan(
         resolvers: List<ResolverEntity>,
@@ -64,7 +65,7 @@ object DnsProbe {
 
             // Some older DNS servers reject EDNS with FORMERR or NOTIMP.
             // Retry once without OPT so a usable legacy resolver is not discarded.
-            if (validation.status == "DNS_ERROR" &&
+            val baseResult = if (validation.status == "DNS_ERROR" &&
                 (validation.responseCode == 1 || validation.responseCode == 4 || validation.responseCode == 16)
             ) {
                 val legacyQuery = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536), includeEdns = false)
@@ -76,17 +77,51 @@ object DnsProbe {
                 } else {
                     "EDNS was rejected (RCODE ${validation.responseCode}); legacy retry: ${legacyValidation.detail}"
                 }
-                return ProbeResult(
+                ProbeResult(
                     legacyValidation.status,
                     (System.nanoTime() - started) / 1_000_000,
                     fallbackDetail
                 )
+            } else {
+                ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
             }
-            ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
+            addNxDomainDiagnostic(address, resolver.port, useTcp, baseResult)
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
         } catch (exception: Exception) {
             ProbeResult("FAIL", detail = exception.message?.take(120) ?: "Network error")
+        }
+    }
+
+    /**
+     * A random name below the reserved .invalid TLD should not resolve.
+     * An unexpected positive answer is a warning signal for wildcard DNS or
+     * possible response interception, not proof of malicious behavior.
+     */
+    private fun addNxDomainDiagnostic(
+        address: InetAddress,
+        port: Int,
+        useTcp: Boolean,
+        base: ProbeResult
+    ): ProbeResult {
+        return try {
+            val randomLabel = "x${Random.nextLong().toString(16)}"
+            val testName = "$randomLabel.$NXDOMAIN_TEST_SUFFIX"
+            val query = DnsPacket.buildQuery(testName, Random.nextInt(0, 65_536), includeEdns = false)
+            val response = if (useTcp) tcpQuery(address, port, query)
+                else udpQuery(address, port, query)
+            val validation = DnsPacket.validateResponse(query, response)
+            val diagnostic = when {
+                validation.responseCode == 3 -> "NXDOMAIN check: expected non-existent-domain response"
+                validation.status == "PASS" -> "WARNING: reserved .invalid domain unexpectedly resolved; possible wildcard DNS or response interception"
+                validation.responseCode == 0 -> "NXDOMAIN check inconclusive: NOERROR without an address"
+                else -> "NXDOMAIN check inconclusive: RCODE ${validation.responseCode}"
+            }
+            val combined = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(240)
+            base.copy(detail = combined)
+        } catch (exception: Exception) {
+            val diagnostic = "NXDOMAIN check unavailable: ${exception.message?.take(80) ?: "network error"}"
+            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(240))
         }
     }
 
