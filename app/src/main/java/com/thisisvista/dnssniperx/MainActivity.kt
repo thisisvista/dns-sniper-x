@@ -183,6 +183,19 @@ private fun HomeContent(
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
+    var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
+    var fastestFirst by rememberSaveable { mutableStateOf(false) }
+    val filteredResolvers = resolvers.filter { resolver ->
+        when (selectedFilter) {
+            "WORKING" -> resolver.udpStatus == "PASS" || resolver.tcpStatus == "PASS"
+            "UDP" -> resolver.udpStatus == "PASS"
+            "TCP" -> resolver.tcpStatus == "PASS"
+            "UNTESTED" -> resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
+            else -> true
+        }
+    }.let { list ->
+        if (fastestFirst) list.sortedBy { item -> listOfNotNull(item.udpLatencyMs, item.tcpLatencyMs).minOrNull() ?: Long.MAX_VALUE } else list
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -244,8 +257,17 @@ private fun HomeContent(
         }
 
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested").forEach { (key, label) ->
+                FilterChip(selected = selectedFilter == key, onClick = { selectedFilter = key }, label = { Text(label) })
+            }
+        }
+        FilterChip(selected = fastestFirst, onClick = { fastestFirst = !fastestFirst }, label = { Text(if (fastestFirst) "Fastest first" else "Best overall first") })
+        Text("${filteredResolvers.size} matching DNS entries", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (resolvers.isEmpty()) {
             Text("No DNS addresses saved yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (filteredResolvers.isEmpty()) {
+            Text("No DNS entries match this filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             filteredResolvers.take(100).forEach { resolver ->
                 Card(
@@ -269,7 +291,7 @@ private fun HomeContent(
                     }
                 }
             }
-            if (filteredResolvers.size > 100) Text("Showing the first 100 matching entries.", style = MaterialTheme.typography.bodySmall)\n            if (filteredResolvers.isEmpty()) Text("No DNS entries match this filter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (filteredResolvers.size > 100) Text("Showing the first 100 matching entries.", style = MaterialTheme.typography.bodySmall)
         }
 
         Text(
