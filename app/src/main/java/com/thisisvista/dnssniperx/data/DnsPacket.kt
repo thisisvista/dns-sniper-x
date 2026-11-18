@@ -37,7 +37,9 @@ internal object DnsPacket {
         return buffer.array()
     }
 
-    fun validateResponse(query: ByteArray, response: ByteArray) {
+    data class ResponseInfo(val status: String, val detail: String)
+
+    fun validateResponse(query: ByteArray, response: ByteArray): ResponseInfo {
         require(query.size >= 12 && response.size >= 12) { "DNS packet is too short" }
         val queryId = unsignedShort(query, 0)
         val responseId = unsignedShort(response, 0)
@@ -45,6 +47,25 @@ internal object DnsPacket {
         val flags = unsignedShort(response, 2)
         require((flags and 0x8000) != 0) { "Packet is not a DNS response" }
         require((flags and 0x7800) == 0) { "Unexpected DNS opcode" }
+
+        val responseCode = flags and 0x000f
+        val answerCount = unsignedShort(response, 6)
+        val responseCodeName = when (responseCode) {
+            0 -> "NOERROR"
+            1 -> "FORMERR"
+            2 -> "SERVFAIL"
+            3 -> "NXDOMAIN"
+            4 -> "NOTIMP"
+            5 -> "REFUSED"
+            else -> "RCODE_$responseCode"
+        }
+        val detail = "DNS response: $responseCodeName (RCODE $responseCode), answers: $answerCount"
+        return when {
+            (flags and 0x0200) != 0 -> ResponseInfo("TRUNCATED", "$detail; UDP response was truncated")
+            responseCode != 0 -> ResponseInfo("DNS_ERROR", detail)
+            answerCount == 0 -> ResponseInfo("NO_ANSWER", "$detail; valid response without an answer")
+            else -> ResponseInfo("PASS", detail)
+        }
     }
 
     private fun unsignedShort(bytes: ByteArray, offset: Int): Int =
