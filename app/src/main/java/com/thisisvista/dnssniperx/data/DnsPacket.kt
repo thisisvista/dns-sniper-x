@@ -139,6 +139,23 @@ internal object DnsPacket {
                 }
                 require(owner.value.isEmpty()) { "EDNS OPT record owner name must be root" }
                 require(opt == null) { "DNS response contains multiple EDNS OPT records" }
+
+                // Each EDNS option is a 4-byte code/length header followed by
+                // exactly the number of data bytes declared by that option.
+                val recordEnd = dataStart + dataLength
+                var optionOffset = dataStart
+                while (optionOffset < recordEnd) {
+                    require(optionOffset + 4 <= recordEnd) {
+                        "Truncated EDNS option header"
+                    }
+                    val optionLength = unsignedShort(packet, optionOffset + 2)
+                    optionOffset += 4
+                    require(optionOffset + optionLength <= recordEnd) {
+                        "Truncated EDNS option data"
+                    }
+                    optionOffset += optionLength
+                }
+
                 val version = ((ttl ushr 16) and 0xff).toInt()
                 val extendedRcode = ((ttl ushr 24) and 0xff).toInt()
                 val ednsFlags = (ttl and 0xffff).toInt()
