@@ -14,148 +14,155 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.thisisvista.dnssniperx.data.ResolverDao
+import com.thisisvista.dnssniperx.data.ResolverDatabase
+import com.thisisvista.dnssniperx.data.ResolverEntity
+import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            DnsSniperXTheme {
-                DnsSniperXApp()
-            }
-        }
+        val dao = ResolverDatabase.getInstance(applicationContext).resolverDao()
+        setContent { DnsSniperXTheme { DnsSniperXApp(dao) } }
     }
 }
 
 @Composable
-private fun DnsSniperXApp() {
+private fun DnsSniperXApp(dao: ResolverDao) {
+    val resolvers by dao.observeAll().collectAsState(initial = emptyList())
+    val count by dao.observeCount().collectAsState(initial = 0)
+    var importText by rememberSaveable { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(
-                    text = "DNS SniperX",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "DNS discovery and diagnostics",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("DNS SniperX", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("DNS discovery and diagnostics", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     ) { innerPadding ->
-        HomeContent(contentPadding = innerPadding)
+        HomeContent(
+            contentPadding = innerPadding,
+            count = count,
+            resolvers = resolvers,
+            importText = importText,
+            onImportTextChange = { importText = it },
+            message = message,
+            onImport = {
+                val parsed = ResolverListParser.parse(importText)
+                scope.launch {
+                    val inserted = if (parsed.isEmpty()) 0 else dao.insertIgnore(parsed).count { it != -1L }
+                    val skipped = parsed.size - inserted
+                    message = when {
+                        parsed.isEmpty() -> "No valid DNS entries found. Check the format."
+                        inserted == 0 -> "No new entries. These DNS addresses are already saved."
+                        skipped > 0 -> "Saved $inserted new DNS entries; skipped $skipped duplicates."
+                        else -> "Saved $inserted DNS entries successfully."
+                    }
+                    if (inserted > 0) importText = ""
+                }
+            },
+            onDelete = { id -> scope.launch { dao.deleteById(id) } }
+        )
     }
 }
 
 @Composable
-private fun HomeContent(contentPadding: PaddingValues) {
+private fun HomeContent(
+    contentPadding: PaddingValues,
+    count: Int,
+    resolvers: List<ResolverEntity>,
+    importText: String,
+    onImportTextChange: (String) -> Unit,
+    message: String,
+    onImport: () -> Unit,
+    onDelete: (Long) -> Unit
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "Project foundation",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("Local DNS library", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "The Android app shell is ready. Collection and scanning features are being built in stages.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("$count DNS entries saved on this device.", style = MaterialTheme.typography.bodyMedium)
             }
         }
 
-        FeatureCard(
-            title = "DNS collection",
-            description = "Import resolver lists and collect candidates from approved public sources.",
-            status = "Planned"
+        Text("Import DNS addresses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        FeatureCard(
-            title = "Local DNS library",
-            description = "Keep collected resolvers on the phone for browsing and later re-testing.",
-            status = "Planned"
+        OutlinedTextField(
+            value = importText,
+            onValueChange = onImportTextChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 4,
+            label = { Text("DNS addresses") },
+            placeholder = { Text("1.1.1.1\n8.8.8.8:53\n[2001:db8::1]:53") }
         )
-        FeatureCard(
-            title = "Network scanner",
-            description = "Test DNS candidates on the network currently used by this phone.",
-            status = "Planned"
-        )
-        FeatureCard(
-            title = "Compatibility checks",
-            description = "Report basic DNS reachability separately from DNSTT / Slipstream tunnel tests.",
-            status = "Planned"
-        )
-        FeatureCard(
-            title = "Export",
-            description = "Prepare grouped results for import into compatible clients such as SlipNet.",
-            status = "Planned"
-        )
+        Button(onClick = onImport, enabled = importText.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+            Text("Import to local library")
+        }
+        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+
+        Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        if (resolvers.isEmpty()) {
+            Text("No DNS addresses saved yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            resolvers.take(100).forEach { resolver ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("${resolver.address}:${resolver.port}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Status: Not tested • Source: ${resolver.source}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(onClick = { onDelete(resolver.id) }) { Text("Remove") }
+                    }
+                }
+            }
+            if (count > 100) Text("Showing the latest 100 entries.", style = MaterialTheme.typography.bodySmall)
+        }
 
         Text(
-            text = "No DNS scan has been run. These sections describe planned features, not working tools yet.",
+            "Local import and storage are active. Network scanning and tunnel compatibility tests are not implemented yet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp)
         )
-    }
-}
-
-@Composable
-private fun FeatureCard(
-    title: String,
-    description: String,
-    status: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = status,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
     }
 }

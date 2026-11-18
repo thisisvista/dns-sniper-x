@@ -6,17 +6,21 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 
 The first release targets Android only. Keep core logic independent from Android UI APIs where practical so a future desktop implementation can reuse tested logic.
 
-## Planned layers
+## Layers and current status
 
-| Layer | Responsibility | Initial status |
+| Layer | Responsibility | Status |
 |---|---|---|
-| UI | Compose screens, progress, filters, result details | Starter screen only |
-| Collector | Import files and retrieve resolver candidates from configured sources | Not implemented |
-| Domain | Resolver model, test outcomes, ranking rules | To be designed |
-| Storage | Room / SQLite database and scan history | Not implemented |
+| UI | Compose screens, progress, filters, result details | Starter UI and local import screen |
+| Collector | Import files and retrieve resolver candidates from configured sources | Manual text import implemented; remote source fetcher planned |
+| Domain | Resolver model, parsing and test outcomes | Resolver record and endpoint parser implemented |
+| Storage | Room / SQLite database and scan history | Room database implemented; scan history fields reserved |
 | Scanner | DNS transport probes and staged diagnostics | Not implemented |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Feasibility review required |
 | Export | Versioned formats and grouped export | Not implemented |
+
+## Local resolver record
+
+Each saved record contains address, port, source, collection time, status, optional last-test time, latency and note. The database deduplicates by address and port. An IP address does not identify a transport, so UDP and TCP results must be modelled separately when scanning is added.
 
 ## Result model: keep the meanings separate
 
@@ -27,22 +31,6 @@ A resolver must not be labelled "tunnel working" just because it answers a DNS q
 3. **End-to-end success:** a real test tunnel completed against a controlled, valid test server and client configuration.
 
 Each result should include the test time, network context, transport, latency, and failure reason where available. Results are time-sensitive and should be re-tested rather than permanently discarded.
-
-## Resolver records
-
-The planned record should retain at least:
-
-- address and port;
-- transport tested (UDP, TCP, DoH, or DoT);
-- source and collection time;
-- test timestamp and latency;
-- network type and operator label, when reliably available;
-- DNS reachability result;
-- tunnel compatibility result;
-- end-to-end result;
-- last failure reason and a history of previous outcomes.
-
-An IP address alone does not identify its transport. UDP and TCP tests must be recorded independently.
 
 ## Scanner safety and network behaviour
 
@@ -67,4 +55,4 @@ Findns may provide useful Go DNS-scanning logic, but it is not an Android applic
 4. retain the MIT license and copyright notice for any reused code;
 5. compare its checks with the app's explicit result categories.
 
-No Findns code is included in this initial scaffold. Reuse is a later, evidence-based decision.
+No Findns code is included in this implementation. Reuse is a later, evidence-based decision.

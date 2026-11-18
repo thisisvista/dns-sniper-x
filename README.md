@@ -1,47 +1,35 @@
 # DNS SniperX
 
-**An independent Android app for collecting, testing, organizing, and exporting DNS resolvers.**
+An independent Android app for collecting, storing, testing and exporting DNS resolver candidates.
 
-DNS SniperX is being built to help users discover DNS resolvers, test them on the phone's current network, keep a local resolver library, and export suitable results for compatible tunneling clients such as SlipNet.
+## Current status
 
-> **Development status:** early foundation. The Android project structure and starter screen are being prepared. DNS collection, scanning, tunnel compatibility checks, and export are not implemented yet.
+- Android project foundation builds successfully in GitHub Actions.
+- Local Room database and manual DNS list import are implemented in the current development branch.
+- Imported entries are syntax-checked and deduplicated by address and port.
+- **No network scanner, DNSTT/Slipstream end-to-end test, or SlipNet export is implemented yet.** A saved DNS entry is not evidence that it works.
 
-## Goals
+## Import format
 
-- Collect resolver candidates from documented public sources and user imports.
-- Keep a local database so previously collected candidates remain available offline.
-- Test candidates over supported transports and record latency and network context.
-- Separate basic DNS reachability from tunnel compatibility and real end-to-end tunnel tests.
-- Export selected results in a documented format that can later be adapted to SlipNet.
+Paste one endpoint per line in the app:
 
-## Important limitations
+- `1.1.1.1`
+- `8.8.8.8:5353`
+- `resolver.example`
+- `[2001:db8::1]:53`
 
-- An offline database can be browsed without internet, but a fresh network test requires a working route to the resolver.
-- A successful DNS query or an open port does **not** prove that DNSTT or Slipstream will work.
-- End-to-end tunnel status can only be confirmed against a valid test server and the required client configuration.
-- Results can differ between mobile operators, Wi-Fi networks, locations, and time.
-
-## Technology
-
-- Android app: Kotlin, Jetpack Compose, Material 3
-- Local storage: Room / SQLite (planned)
-- Scanner core: modular design; Go-based components from other projects will be evaluated before any reuse
-- Minimum Android version: Android 8.0 (API 26), subject to change after device testing
-
-## Project structure
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the planned modules and technical boundaries, and [docs/ROADMAP.md](docs/ROADMAP.md) for implementation stages.
+Port 53 is assumed when omitted. The current importer validates endpoint syntax; it does not resolve hostnames or test connectivity.
 
 ## Build
 
-Open this repository in a recent Android Studio release with Android SDK 36 and JDK 17 installed. The Gradle wrapper will be added as part of the build setup. Until then, use a locally installed compatible Gradle 8.13 distribution to run:
+The GitHub Actions workflow builds the Android debug APK using JDK 17, Android SDK 36 and Gradle 8.13.
 
-```bash
-gradle assembleDebug
-```
+## Product principles
 
-The generated debug APK, when the build succeeds, is located at `app/build/outputs/apk/debug/app-debug.apk`.
+- Keep a local library that can be browsed offline.
+- Preserve source information and test history.
+- Test transports separately (UDP, TCP, DoH, DoT).
+- Distinguish DNS reachability, tunnel compatibility and real end-to-end tunnel success.
+- Use public or user-provided sources responsibly and apply scan limits.
 
-## License
-
-The project is currently marked as **All rights reserved** until a project license is deliberately selected. Third-party components, if adopted, will retain their own license notices. No Findns source code has been copied into this initial scaffold.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
