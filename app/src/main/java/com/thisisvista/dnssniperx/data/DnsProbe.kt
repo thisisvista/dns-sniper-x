@@ -176,7 +176,11 @@ object DnsProbe {
     private fun udpQuery(address: InetAddress, port: Int, query: ByteArray): ByteArray {
         DatagramSocket().use { socket ->
             socket.soTimeout = TIMEOUT_MS
-            socket.send(DatagramPacket(query, query.size, InetSocketAddress(address, port)))
+            // Connect the UDP socket to the selected resolver. The OS then
+            // filters datagrams from other source addresses/ports, preventing
+            // unrelated or spoofed packets from being accepted as DNS replies.
+            socket.connect(InetSocketAddress(address, port))
+            socket.send(DatagramPacket(query, query.size))
             val packet = DatagramPacket(ByteArray(4096), 4096)
             socket.receive(packet)
             return packet.data.copyOf(packet.length)
