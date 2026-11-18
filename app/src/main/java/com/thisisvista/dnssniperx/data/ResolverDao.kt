@@ -8,7 +8,24 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ResolverDao {
-    @Query("SELECT * FROM resolvers ORDER BY collectedAt DESC, address ASC")
+    @Query("""
+        SELECT * FROM resolvers
+        ORDER BY
+            CASE
+                WHEN udpStatus = 'PASS' AND tcpStatus = 'PASS' THEN 0
+                WHEN udpStatus = 'PASS' OR tcpStatus = 'PASS' THEN 1
+                WHEN udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED' THEN 2
+                ELSE 3
+            END ASC,
+            CASE
+                WHEN udpLatencyMs IS NULL THEN tcpLatencyMs
+                WHEN tcpLatencyMs IS NULL THEN udpLatencyMs
+                WHEN udpLatencyMs < tcpLatencyMs THEN udpLatencyMs
+                ELSE tcpLatencyMs
+            END ASC,
+            collectedAt DESC,
+            address ASC
+    """)
     fun observeAll(): Flow<List<ResolverEntity>>
 
     @Query("SELECT COUNT(*) FROM resolvers")
