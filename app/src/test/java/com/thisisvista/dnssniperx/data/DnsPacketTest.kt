@@ -220,7 +220,9 @@ class DnsPacketTest {
 
     @Test
     fun rejectsCompressionPointerIntoLabelPayload() {
-        val query = DnsPacket.buildQuery("example.com", 42)
+        // The byte at offset 13 is deliberately 3, which looks like a valid
+        // label length but is actually the first byte inside the "name" label.
+        val query = DnsPacket.buildQuery("\u0003bc.com", 42)
         val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
             this[2] = 0x81.toByte()
             this[3] = 0x80.toByte()
@@ -229,6 +231,7 @@ class DnsPacketTest {
             addAll(listOf(0xc0, 0x0d, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
         }.toByteArray()
 
+        assertEquals(3, response[13].toInt() and 0xff)
         assertThrows(IllegalArgumentException::class.java) {
             DnsPacket.validateResponse(query, response)
         }
