@@ -129,7 +129,7 @@ internal object DnsPacket {
                 (length and 0xc0) == 0xc0 -> {
                     require(offset + 1 < packet.size) { "Truncated DNS compression pointer" }
                     val pointer = ((length and 0x3f) shl 8) or (packet[offset + 1].toInt() and 0xff)
-                    require(pointer < packet.size) { "Invalid DNS compression pointer" }
+                    require(pointer < offset) { "DNS compression pointer must reference an earlier name" }
                     return offset + 2
                 }
                 (length and 0xc0) != 0 -> error("Invalid DNS label length")
