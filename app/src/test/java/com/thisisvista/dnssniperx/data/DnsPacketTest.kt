@@ -148,6 +148,25 @@ class DnsPacketTest {
     }
 
     @Test
+    fun identifiesTruncatedResponseBeforeParsingIncompleteAnswerRecords() {
+        val query = DnsPacket.buildQuery("org", 42, queryType = 48, requestDnssec = true)
+        // TC is set and ANCOUNT says one answer, but the packet ends after
+        // the complete question. This is a valid truncated DNS response.
+        val response = query.copyOfRange(0, questionEndOffset(query) + 4).apply {
+            this[2] = 0x83.toByte()
+            this[3] = 0x80.toByte()
+            this[6] = 0
+            this[7] = 1
+            this[10] = 0
+            this[11] = 0
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("TRUNCATED", result.status)
+        org.junit.Assert.assertTrue(result.detail.contains("TC flag set"))
+    }
+
+    @Test
     fun reportsEdnsWhenServerReturnsOptRecord() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOf().apply {

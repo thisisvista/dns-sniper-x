@@ -88,9 +88,21 @@ internal object DnsPacket {
             "DNS question type or class mismatch"
         }
 
+        val answerCount = unsignedShort(response, 6)
+        // A TC response is allowed to omit the remainder of an RR. Validate
+        // the echoed question above, then classify truncation before parsing
+        // answer/authority/additional records that may be incomplete.
+        if ((flags and 0x0200) != 0) {
+            val responseCode = flags and 0x000f
+            return ResponseInfo(
+                "TRUNCATED",
+                "DNS response is truncated (TC flag set); answers: ${answerCount}; remaining records may be incomplete",
+                responseCode
+            )
+        }
+
         val edns = inspectAdditionalRecords(response)
         val responseCode = (edns.extendedRcode shl 4) or (flags and 0x000f)
-        val answerCount = unsignedShort(response, 6)
         val responseCodeName = when (responseCode) {
             0 -> "NOERROR"
             1 -> "FORMERR"
@@ -103,7 +115,6 @@ internal object DnsPacket {
         }
         val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${edns.description}"
         return when {
-            (flags and 0x0200) != 0 -> ResponseInfo("TRUNCATED", "${detail}; UDP response was truncated", responseCode)
             responseCode != 0 -> ResponseInfo("DNS_ERROR", detail, responseCode)
             answerCount == 0 -> ResponseInfo("NO_ANSWER", "${detail}; valid response without an answer", responseCode)
             else -> ResponseInfo("PASS", detail, responseCode)
