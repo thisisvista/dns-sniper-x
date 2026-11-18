@@ -1,7 +1,10 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -49,24 +52,28 @@ object ResolverCollector {
 
     suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
         withContext(Dispatchers.IO) {
-            val entries = mutableListOf<ResolverEntity>()
-            val results = mutableListOf<SourceFetchResult>()
-
-            for (source in sources) {
-                try {
-                    val content = download(source.url)
-                    val parsed = ResolverListParser.parse(content, source = source.id)
-                        .take(MAX_LINES_PER_SOURCE)
-                    entries += parsed
-                    results += SourceFetchResult(source.description, parsed.size, 0)
-                } catch (exception: Exception) {
-                    results += SourceFetchResult(
-                        source.description, 0, 0,
-                        exception.message?.take(160) ?: "Download failed"
-                    )
+            // Fetch the reviewed sources concurrently so one slow or unreachable
+            // host does not delay every other source. awaitAll preserves source order.
+            val fetched = sources.map { source ->
+                async {
+                    try {
+                        val content = download(source.url)
+                        val parsed = ResolverListParser.parse(content, source = source.id)
+                            .take(MAX_LINES_PER_SOURCE)
+                        SourceFetchResult(source.description, parsed.size, 0) to parsed
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (exception: Exception) {
+                        SourceFetchResult(
+                            source.description, 0, 0,
+                            exception.message?.take(160) ?: "Download failed"
+                        ) to emptyList()
+                    }
                 }
-            }
+            }.awaitAll()
 
+            val results = fetched.map { it.first }
+            val entries = fetched.flatMap { it.second }
             CollectionSummary(results) to entries.distinctBy { it.address.lowercase() to it.port }
         }
 
