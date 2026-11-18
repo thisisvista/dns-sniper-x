@@ -149,6 +149,22 @@ class DnsPacketTest {
     }
 
     @Test
+    fun setsDnssecOkBitWhenRequested() {
+        val query = DnsPacket.buildQuery("example.com", 42, requestDnssec = true)
+        val ttlOffset = questionEndOffset(query) + 9
+
+        assertEquals(0x80, query[ttlOffset + 2].toInt() and 0xff)
+        assertEquals(0x00, query[ttlOffset + 3].toInt() and 0xff)
+    }
+
+    @Test
+    fun rejectsDnssecRequestWithoutEdns() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.buildQuery("example.com", 42, includeEdns = false, requestDnssec = true)
+        }
+    }
+
+    @Test
     fun buildsLegacyQueryWithoutEdnsOptRecord() {
         val query = DnsPacket.buildQuery("example.com", 42, includeEdns = false)
         assertEquals(0, query[10].toInt() and 0xff)
