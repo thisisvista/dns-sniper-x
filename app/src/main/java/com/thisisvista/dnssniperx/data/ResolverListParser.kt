@@ -7,6 +7,7 @@ object ResolverListParser {
     private val hostnamePattern = Regex("^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
     private val ipv4Pattern = Regex("^(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
     private val ipv6Pattern = Regex("^[0-9A-Fa-f:]+$")
+    private val csvHeaderValues = setOf("ip", "ip_address", "address", "resolver", "dns", "nameserver", "name_server", "server", "host")
 
     fun parse(text: String, source: String = "manual"): List<ResolverEntity> {
         val now = System.currentTimeMillis()
@@ -15,7 +16,8 @@ object ResolverListParser {
             .filter { it.isNotEmpty() }
             .mapNotNull { line ->
                 val endpoint = line.substringBefore(",").trim().removeSurrounding("\"")
-                parseEndpoint(endpoint, source.trim().ifEmpty { "manual" }, now)
+                if (endpoint.lowercase() in csvHeaderValues) null
+                else parseEndpoint(endpoint, source.trim().ifEmpty { "manual" }, now)
             }
             .distinctBy { it.address.lowercase() to it.port }
             .toList()
@@ -36,7 +38,7 @@ object ResolverListParser {
                 suffix.drop(1).toIntOrNull() ?: return null
             }
             if (!isIpv6(address)) return null
-        } else if (endpoint.count { it == ':' } == 1 && endpoint.substringBefore(':').contains('.')) {
+        } else if (endpoint.count { it == ':' } == 1 && endpoint.substringBefore(':').contains(".")) {
             address = endpoint.substringBefore(':')
             port = endpoint.substringAfter(':').toIntOrNull() ?: return null
             if (!isIpv4(address)) return null
