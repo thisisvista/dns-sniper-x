@@ -354,6 +354,56 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun acceptsWellFormedEdnsOption() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            val optOffset = questionEndOffset(query) + 4
+            this[optOffset + 9] = 0
+            this[optOffset + 10] = 6 // one option: code 65001, length 2
+            addAll(listOf(0xfd, 0xe9, 0, 2, 0x12, 0x34).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("NO_ANSWER", result.status)
+    }
+
+    @Test
+    fun rejectsTruncatedEdnsOptionHeader() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            val optOffset = questionEndOffset(query) + 4
+            this[optOffset + 9] = 0
+            this[optOffset + 10] = 3
+            addAll(listOf(0, 1, 0).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
+    fun rejectsEdnsOptionDataLongerThanRemainingRecordData() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            val optOffset = questionEndOffset(query) + 4
+            this[optOffset + 9] = 0
+            this[optOffset + 10] = 6
+            addAll(listOf(0, 1, 0, 4, 0x12, 0x34).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
