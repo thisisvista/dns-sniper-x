@@ -130,6 +130,28 @@ class DnsPacketTest {
         org.junit.Assert.assertTrue(result.detail.contains("EDNS not advertised"))
     }
 
+
+    @Test
+    fun buildsLegacyQueryWithoutEdnsOptRecord() {
+        val query = DnsPacket.buildQuery("example.com", 42, includeEdns = false)
+        assertEquals(0, query[10].toInt() and 0xff)
+        assertEquals(0, query[11].toInt() and 0xff)
+        assertEquals(questionEndOffset(query) + 4, query.size)
+    }
+
+    @Test
+    fun exposesFormerrResponseCodeForLegacyFallbackDecision() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x81.toByte()
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("DNS_ERROR", result.status)
+        assertEquals(1, result.responseCode)
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
