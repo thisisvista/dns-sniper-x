@@ -180,7 +180,7 @@ internal object DnsPacket {
                     if (nextOffset == null) nextOffset = offset + 2
                     offset = pointer
                 }
-                (length and 0xc0) != 0 -> error("Invalid DNS label length")
+                (length and 0xc0) != 0 -> throw IllegalArgumentException("Invalid DNS label length")
                 else -> {
                     require(offset + 1 + length <= packet.size) { "Truncated DNS label" }
                     expandedLength += length + 1
