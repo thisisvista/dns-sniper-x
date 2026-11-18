@@ -322,6 +322,38 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun rejectsMultipleEdnsOptRecords() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[10] = 0
+            this[11] = 2 // two Additional records
+            addAll(listOf(0, 41, 4, 208, 0, 0, 0, 0, 0, 0).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
+    fun rejectsEdnsOptRecordWithNonRootOwnerName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val optOffset = questionEndOffset(query) + 4
+        val response = (query.copyOfRange(0, optOffset).toList() +
+            listOf(1, 'x'.code, 0, 0, 41, 4, 208, 0, 0, 0, 0, 0, 0).map { it.toByte() })
+            .toMutableList().apply {
+                this[2] = 0x81.toByte()
+                this[3] = 0x80.toByte()
+            }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
