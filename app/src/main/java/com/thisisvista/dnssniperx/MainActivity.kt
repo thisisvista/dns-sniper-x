@@ -192,8 +192,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             try {
                                 pending.chunked(500).forEachIndexed { batchIndex, batch ->
                                     message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
-                                    val results = DnsProbe.scan(batch)
-                                    results.forEach { result ->
+                                    DnsProbe.scan(batch) { result ->
                                         val best = listOfNotNull(result.udp.latencyMs, result.tcp.latencyMs).minOrNull()
                                         val overall = when {
                                             result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
@@ -215,9 +214,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                             bestLatency = best,
                                             note = notes
                                         )
+                                        completed += 1
+                                        scanProgress = "$completed / ${pending.size}"
                                     }
-                                    completed += results.size
-                                    scanProgress = "$completed / ${pending.size}"
                                 }
                                 message = "Scan complete: $completed DNS entries tested and saved. New entries can be scanned in the next run."
                             } catch (cancelled: CancellationException) {

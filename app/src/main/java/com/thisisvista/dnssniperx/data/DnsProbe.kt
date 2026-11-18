@@ -1,6 +1,7 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -26,23 +27,30 @@ object DnsProbe {
     private const val MAX_BATCH_SIZE = 500
     private const val TEST_NAME = "example.com"
 
-    suspend fun scan(resolvers: List<ResolverEntity>): List<ResolverScanResult> =
-        withContext(Dispatchers.IO) {
-            val semaphore = Semaphore(MAX_PARALLEL_RESOLVERS)
-            coroutineScope {
-                resolvers.take(MAX_BATCH_SIZE).map { resolver ->
-                    async {
-                        semaphore.withPermit {
-                            ResolverScanResult(
+    suspend fun scan(
+        resolvers: List<ResolverEntity>,
+        onResult: suspend (ResolverScanResult) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val semaphore = Semaphore(MAX_PARALLEL_RESOLVERS)
+        coroutineScope {
+            resolvers.take(MAX_BATCH_SIZE).map { resolver ->
+                async {
+                    semaphore.withPermit {
+                        // Let an active resolver finish and save its result before honoring pause.
+                        // This prevents completed probes from being lost when a batch is cancelled.
+                        withContext(NonCancellable) {
+                            val result = ResolverScanResult(
                                 resolver.id,
                                 probe(resolver, useTcp = false),
                                 probe(resolver, useTcp = true)
                             )
+                            onResult(result)
                         }
                     }
-                }.awaitAll()
-            }
+                }
+            }.awaitAll()
         }
+    }
 
     private fun probe(resolver: ResolverEntity, useTcp: Boolean): ProbeResult {
         val started = System.nanoTime()
