@@ -117,29 +117,46 @@ internal object DnsPacket {
         return opt ?: EdnsInfo(0, "EDNS not advertised by server")
     }
 
-    /** Returns the offset immediately after a possibly compressed DNS name. */
+    /**
+     * Returns the offset immediately after a possibly compressed DNS name.
+     * Compression targets are traversed and validated, not merely skipped.
+     */
     private fun skipName(packet: ByteArray, start: Int): Int {
         var offset = start
+        var nextOffset: Int? = null
+        var expandedLength = 0
         var steps = 0
+        val visited = mutableSetOf<Int>()
+
         while (true) {
             require(offset < packet.size) { "Truncated DNS name" }
+            require(visited.add(offset)) { "DNS compression pointer loop" }
             val length = packet[offset].toInt() and 0xff
             when {
-                length == 0 -> return offset + 1
+                length == 0 -> {
+                    expandedLength += 1
+                    require(expandedLength <= 255) { "DNS name is too long" }
+                    return nextOffset ?: (offset + 1)
+                }
                 (length and 0xc0) == 0xc0 -> {
                     require(offset + 1 < packet.size) { "Truncated DNS compression pointer" }
                     val pointer = ((length and 0x3f) shl 8) or (packet[offset + 1].toInt() and 0xff)
-                    require(pointer < offset) { "DNS compression pointer must reference an earlier name" }
-                    return offset + 2
+                    require(pointer >= 12 && pointer < offset) {
+                        "DNS compression pointer must reference an earlier name"
+                    }
+                    if (nextOffset == null) nextOffset = offset + 2
+                    offset = pointer
                 }
                 (length and 0xc0) != 0 -> error("Invalid DNS label length")
                 else -> {
                     require(offset + 1 + length <= packet.size) { "Truncated DNS label" }
+                    expandedLength += length + 1
+                    require(expandedLength <= 255) { "DNS name is too long" }
                     offset += length + 1
                 }
             }
             steps++
-            require(steps <= 127) { "DNS name is too long" }
+            require(steps <= 256) { "DNS name is too long or malformed" }
         }
     }
 
