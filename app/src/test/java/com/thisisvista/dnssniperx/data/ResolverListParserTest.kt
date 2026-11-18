@@ -19,6 +19,11 @@ class ResolverListParserTest {
         assertEquals("resolver.example", result[1].address)
     }
 
+    @Test fun rejectsMalformedIpv6Addresses() {
+        val result = ResolverListParser.parse("[::::]:53\n[1:2:3]:53\n2001:db8::1")
+        assertEquals(listOf("2001:db8::1"), result.map { it.address })
+    }
+
     @Test fun ignoresCommentsInvalidEntriesAndDuplicates() {
         val result = ResolverListParser.parse("# public list\n1.1.1.1\n1.1.1.1\n999.1.1.1\nnot a server")
         assertEquals(1, result.size)

@@ -1,12 +1,14 @@
 package com.thisisvista.dnssniperx.data
 
+import java.net.Inet6Address
+import java.net.InetAddress
+
 /**
  * Parses one resolver endpoint per line. Syntax validation only; no network test is performed.
  */
 object ResolverListParser {
     private val hostnamePattern = Regex("^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
     private val ipv4Pattern = Regex("^(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
-    private val ipv6Pattern = Regex("^[0-9A-Fa-f:]+$")
     private val csvHeaderValues = setOf("ip", "ip_address", "address", "resolver", "dns", "nameserver", "name_server", "server", "host")
 
     fun parse(text: String, source: String = "manual"): List<ResolverEntity> {
@@ -54,6 +56,13 @@ object ResolverListParser {
     }
 
     private fun isIpv4(value: String) = ipv4Pattern.matches(value)
-    private fun isIpv6(value: String) =
-        value.contains(':') && ipv6Pattern.matches(value) && value.count { it == ':' } >= 2
+
+    private fun isIpv6(value: String): Boolean {
+        if (!value.contains(':') || value.contains('%')) return false
+        return try {
+            InetAddress.getByName(value) is Inet6Address
+        } catch (_: Exception) {
+            false
+        }
+    }
 }
