@@ -96,9 +96,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         val properties: LinkProperties? = network?.let { connectivity.getLinkProperties(it) }
                         val capabilities: NetworkCapabilities? = network?.let { connectivity.getNetworkCapabilities(it) }
                         val networkType = when {
+                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
                             capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Mobile"
                             capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"
-                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
                             else -> "Other or unknown"
                         }
                         val addresses = properties?.dnsServers.orEmpty()
@@ -110,7 +110,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         } else {
                             val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network ($networkType; user label: $provider)")
                             val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
-                            message = "Detected ${addresses.size} DNS server(s) on $networkType; saved $inserted new DNS entr(y/ies) with label: $provider. ISP ownership is not verified."
+                            message = "Detected ${addresses.size} DNS server(s) on $networkType; saved $inserted new DNS entries with label: $provider. ISP ownership is not verified."
                         }
                     } catch (exception: Exception) {
                         message = "Could not read current network DNS: ${exception.message ?: "Unknown error"}"
@@ -356,6 +356,13 @@ private fun HomeContent(
             Text("No DNS entries match this filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             filteredResolvers.take(100).forEach { resolver ->
+                val sourceDescription = if (resolver.source.startsWith("current-network (")) {
+                    val networkType = resolver.source.substringAfter("current-network (").substringBefore(";")
+                    val providerLabel = resolver.source.substringAfter("user label: ", "Unspecified").substringBefore(")")
+                    "Network: $networkType • Provider label: $providerLabel"
+                } else {
+                    "Source: ${resolver.source}"
+                }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
@@ -372,7 +379,7 @@ private fun HomeContent(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text("Source: ${resolver.source}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(sourceDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { onDelete(resolver.id) }) { Text("Remove") }
                     }
                 }
