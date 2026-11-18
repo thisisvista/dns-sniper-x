@@ -51,8 +51,8 @@ object DnsProbe {
             val query = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536))
             val response = if (useTcp) tcpQuery(address, resolver.port, query)
                 else udpQuery(address, resolver.port, query)
-            DnsPacket.validateResponse(query, response)
-            ProbeResult("PASS", (System.nanoTime() - started) / 1_000_000)
+            val validation = DnsPacket.validateResponse(query, response)
+            ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
         } catch (exception: Exception) {
