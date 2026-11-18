@@ -53,6 +53,25 @@ internal object DnsPacket {
         require((flags and 0x8000) != 0) { "Packet is not a DNS response" }
         require((flags and 0x7800) == 0) { "Unexpected DNS opcode" }
 
+        // A response must echo the question that was actually sent.
+        require(unsignedShort(query, 4) == 1 && unsignedShort(response, 4) == 1) {
+            "Expected exactly one DNS question"
+        }
+        val queryName = readName(query, 12)
+        val responseName = readName(response, 12)
+        require(queryName.value.equals(responseName.value, ignoreCase = true)) {
+            "DNS question name mismatch"
+        }
+        require(queryName.nextOffset + 4 <= query.size &&
+            responseName.nextOffset + 4 <= response.size) { "Truncated DNS question" }
+        val queryType = unsignedShort(query, queryName.nextOffset)
+        val queryClass = unsignedShort(query, queryName.nextOffset + 2)
+        val responseType = unsignedShort(response, responseName.nextOffset)
+        val responseClass = unsignedShort(response, responseName.nextOffset + 2)
+        require(queryType == responseType && queryClass == responseClass) {
+            "DNS question type or class mismatch"
+        }
+
         val edns = inspectAdditionalRecords(response)
         val responseCode = (edns.extendedRcode shl 4) or (flags and 0x000f)
         val answerCount = unsignedShort(response, 6)
@@ -121,12 +140,18 @@ internal object DnsPacket {
      * Returns the offset immediately after a possibly compressed DNS name.
      * Compression targets are traversed and validated, not merely skipped.
      */
-    private fun skipName(packet: ByteArray, start: Int): Int {
+    private data class NameInfo(val value: String, val nextOffset: Int)
+
+    private fun skipName(packet: ByteArray, start: Int): Int = readName(packet, start).nextOffset
+
+    /** Decodes a DNS name, following only bounded backward compression pointers. */
+    private fun readName(packet: ByteArray, start: Int): NameInfo {
         var offset = start
         var nextOffset: Int? = null
         var expandedLength = 0
         var steps = 0
         val visited = mutableSetOf<Int>()
+        val labels = mutableListOf<String>()
 
         while (true) {
             require(offset < packet.size) { "Truncated DNS name" }
@@ -136,7 +161,7 @@ internal object DnsPacket {
                 length == 0 -> {
                     expandedLength += 1
                     require(expandedLength <= 255) { "DNS name is too long" }
-                    return nextOffset ?: (offset + 1)
+                    return NameInfo(labels.joinToString("."), nextOffset ?: (offset + 1))
                 }
                 (length and 0xc0) == 0xc0 -> {
                     require(offset + 1 < packet.size) { "Truncated DNS compression pointer" }
@@ -152,6 +177,8 @@ internal object DnsPacket {
                     require(offset + 1 + length <= packet.size) { "Truncated DNS label" }
                     expandedLength += length + 1
                     require(expandedLength <= 255) { "DNS name is too long" }
+                    labels += packet.copyOfRange(offset + 1, offset + 1 + length)
+                        .toString(Charsets.US_ASCII)
                     offset += length + 1
                 }
             }
