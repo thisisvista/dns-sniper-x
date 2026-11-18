@@ -11,9 +11,12 @@ object ResolverListParser {
     fun parse(text: String, source: String = "manual"): List<ResolverEntity> {
         val now = System.currentTimeMillis()
         return text.lineSequence()
-            .map { it.substringBefore("#").trim() }
+            .map { it.removePrefix("\uFEFF").substringBefore("#").trim() }
             .filter { it.isNotEmpty() }
-            .mapNotNull { parseEndpoint(it.substringBefore(",").trim(), source.trim().ifEmpty { "manual" }, now) }
+            .mapNotNull { line ->
+                val endpoint = line.substringBefore(",").trim().removeSurrounding("\"")
+                parseEndpoint(endpoint, source.trim().ifEmpty { "manual" }, now)
+            }
             .distinctBy { it.address.lowercase() to it.port }
             .toList()
     }

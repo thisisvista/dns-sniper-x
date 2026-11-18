@@ -24,4 +24,15 @@ class ResolverListParserTest {
         assertEquals(1, result.size)
         assertTrue(result.all { it.status == "NOT_TESTED" })
     }
+
+    @Test fun parsesQuotedCsvAddressesAndUtf8Bom() {
+        val result = ResolverListParser.parse("\uFEFF\"1.2.3.4\",53,IR\n\"8.8.4.4\",53,US")
+        assertEquals(listOf("1.2.3.4", "8.8.4.4"), result.map { it.address })
+    }
+
+    @Test fun ignoresCsvHeaderAndKeepsIpv6() {
+        val result = ResolverListParser.parse("ip,port,country\n2001:4860:4860::8888,53,US")
+        assertEquals(1, result.size)
+        assertEquals("2001:4860:4860::8888", result.single().address)
+    }
 }
