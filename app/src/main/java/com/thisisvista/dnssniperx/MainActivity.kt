@@ -173,10 +173,10 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     note = notes
                                 )
                             }
-                            val udpPass = results.count { it.udp.status == "PASS" }
-                            val tcpPass = results.count { it.tcp.status == "PASS" }
-                            message = "Tested ${results.size} DNS entries. UDP passed: $udpPass; TCP passed: $tcpPass."
-                            if (resolvers.size > 100) message += " Scan is limited to the first 100 entries per run."
+                            val udpSummary = summarizeStatuses(results.map { it.udp.status })
+                            val tcpSummary = summarizeStatuses(results.map { it.tcp.status })
+                            message = "Scan complete: ${results.size} DNS entries.\nUDP — $udpSummary\nTCP — $tcpSummary"
+                            if (resolvers.size > 100) message += "\nScan is limited to the first 100 entries per run."
                         } catch (exception: Exception) {
                             message = "Scan failed: ${exception.message ?: "Unknown error"}"
                         } finally {
@@ -300,6 +300,11 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Text(
+            "Result guide: PASS = valid answer; DNS error = server replied with an error (for example, blocked or nonexistent domain); No answer = valid reply without an address; Truncated = reply was cut short; Timeout = no reply in time; Failed = network or protocol problem.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Button(onClick = onScan, enabled = count > 0 && !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
             if (isScanning) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
@@ -370,16 +375,19 @@ private fun HomeContent(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("${resolver.address}:${resolver.port}", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "UDP: ${resolver.udpStatus}${resolver.udpLatencyMs?.let { " • ${it} ms" } ?: ""}",
+                            "UDP: ${friendlyProbeStatus(resolver.udpStatus)}${resolver.udpLatencyMs?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "TCP: ${resolver.tcpStatus}${resolver.tcpLatencyMs?.let { " • ${it} ms" } ?: ""}",
+                            "TCP: ${friendlyProbeStatus(resolver.tcpStatus)}${resolver.tcpLatencyMs?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(sourceDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        resolver.note?.takeIf { it.isNotBlank() }?.let { detail ->
+                            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Button(onClick = { onDelete(resolver.id) }) { Text("Remove") }
                     }
                 }
@@ -394,4 +402,30 @@ private fun HomeContent(
             modifier = Modifier.padding(vertical = 8.dp)
         )
     }
+}
+
+
+private fun friendlyProbeStatus(status: String): String = when (status) {
+    "PASS" -> "PASS — working response"
+    "DNS_ERROR" -> "DNS error — server replied with an error"
+    "NO_ANSWER" -> "No answer — server replied without an address"
+    "TRUNCATED" -> "Truncated — response was incomplete"
+    "TIMEOUT" -> "Timeout — no reply in time"
+    "FAIL" -> "Failed — network or protocol error"
+    "NOT_TESTED" -> "Not tested"
+    else -> status
+}
+
+private fun summarizeStatuses(statuses: List<String>): String {
+    val labels = listOf(
+        "PASS" to "passed",
+        "DNS_ERROR" to "DNS errors",
+        "NO_ANSWER" to "no answer",
+        "TRUNCATED" to "truncated",
+        "TIMEOUT" to "timeouts",
+        "FAIL" to "failed"
+    )
+    return labels.mapNotNull { (status, label) ->
+        statuses.count { it == status }.takeIf { it > 0 }?.let { "$it $label" }
+    }.joinToString(", ").ifBlank { "no results" }
 }
