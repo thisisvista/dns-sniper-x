@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
@@ -53,6 +55,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val count by dao.observeCount().collectAsState(initial = 0)
     var importText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
+    var isCollecting by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -71,6 +74,33 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             importText = importText,
             onImportTextChange = { importText = it },
             message = message,
+            isCollecting = isCollecting,
+            onCollect = {
+                if (!isCollecting) {
+                    scope.launch {
+                        isCollecting = true
+                        message = "Downloading public resolver lists…"
+                        try {
+                            val (summary, entries) = ResolverCollector.downloadAndParse()
+                            val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
+                            val failures = summary.results.filter { it.error != null }
+                            val sourceReport = summary.results.joinToString { result ->
+                                if (result.error == null) "${result.source}: ${result.found}" else "${result.source}: unavailable"
+                            }
+                            message = buildString {
+                                append("Found ${summary.found} candidates; saved ${inserted} new DNS entries.")
+                                if (failures.isNotEmpty()) append(" ${failures.size} source(s) could not be reached.")
+                                append("\n").append(sourceReport)
+                                if (summary.found > inserted) append("\nExisting duplicates or repeated entries were skipped.")
+                            }
+                        } catch (exception: Exception) {
+                            message = "Collection failed: ${exception.message ?: "Unknown error"}"
+                        } finally {
+                            isCollecting = false
+                        }
+                    }
+                }
+            },
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
                 scope.launch {
@@ -98,6 +128,8 @@ private fun HomeContent(
     importText: String,
     onImportTextChange: (String) -> Unit,
     message: String,
+    isCollecting: Boolean,
+    onCollect: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -116,7 +148,23 @@ private fun HomeContent(
             }
         }
 
-        Text("Import DNS addresses", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Discover public DNS lists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Download candidates from the configured public sources. Internet access is required; downloaded addresses are not yet tested.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(onClick = onCollect, enabled = !isCollecting, modifier = Modifier.fillMaxWidth()) {
+            if (isCollecting) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                Text("  Collecting…")
+            } else {
+                Text("Fetch public DNS lists")
+            }
+        }
+        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+
+        Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
             style = MaterialTheme.typography.bodySmall,
@@ -133,7 +181,6 @@ private fun HomeContent(
         Button(onClick = onImport, enabled = importText.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
             Text("Import to local library")
         }
-        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         if (resolvers.isEmpty()) {
@@ -159,7 +206,7 @@ private fun HomeContent(
         }
 
         Text(
-            "Local import and storage are active. Network scanning and tunnel compatibility tests are not implemented yet.",
+            "Public list collection and local storage are active. Network scanning and tunnel compatibility tests are not implemented yet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp)

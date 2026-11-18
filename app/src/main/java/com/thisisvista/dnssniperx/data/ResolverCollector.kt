@@ -1,0 +1,82 @@
+package com.thisisvista.dnssniperx.data
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+
+data class ResolverSource(val id: String, val url: String, val description: String)
+data class SourceFetchResult(val source: String, val found: Int, val inserted: Int, val error: String? = null)
+data class CollectionSummary(val results: List<SourceFetchResult>) {
+    val found: Int get() = results.sumOf { it.found }
+    val failedSources: Int get() = results.count { it.error != null }
+}
+
+/** Downloads candidate resolvers from a small, reviewed HTTPS allowlist. */
+object ResolverCollector {
+    private const val CONNECT_TIMEOUT_MS = 12_000
+    private const val READ_TIMEOUT_MS = 15_000
+    private const val MAX_LINES_PER_SOURCE = 25_000
+    private const val MAX_CHARS_PER_SOURCE = 4_000_000
+
+    val sources = listOf(
+        ResolverSource("public-dns-info", "https://public-dns.info/nameservers.csv", "Public DNS Info"),
+        ResolverSource("trickest-resolvers", "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt", "Trickest Resolvers")
+    )
+
+    suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
+        withContext(Dispatchers.IO) {
+            val entries = mutableListOf<ResolverEntity>()
+            val results = mutableListOf<SourceFetchResult>()
+
+            for (source in sources) {
+                try {
+                    val content = download(source.url)
+                    val parsed = ResolverListParser.parse(content, source = source.id)
+                        .take(MAX_LINES_PER_SOURCE)
+                    entries += parsed
+                    results += SourceFetchResult(source.description, parsed.size, 0)
+                } catch (exception: Exception) {
+                    results += SourceFetchResult(
+                        source.description, 0, 0,
+                        exception.message?.take(160) ?: "Download failed"
+                    )
+                }
+            }
+
+            CollectionSummary(results) to entries.distinctBy { it.address.lowercase() to it.port }
+        }
+
+    private fun download(address: String): String {
+        val connection = (URL(address).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "DNS-SniperX/0.3 Android")
+            setRequestProperty("Accept", "text/plain,text/csv,*/*")
+        }
+
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) error("HTTP $status")
+
+            val builder = StringBuilder()
+            BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
+                var lineCount = 0
+                while (lineCount < MAX_LINES_PER_SOURCE) {
+                    val line = reader.readLine() ?: break
+                    if (builder.length + line.length > MAX_CHARS_PER_SOURCE) error("Source exceeded the size limit")
+                    builder.append(line).append('\n')
+                    lineCount++
+                }
+            }
+            return builder.toString()
+        } finally {
+            connection.disconnect()
+        }
+    }
+}

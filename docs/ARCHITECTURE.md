@@ -10,13 +10,22 @@ The first release targets Android only. Keep core logic independent from Android
 
 | Layer | Responsibility | Status |
 |---|---|---|
-| UI | Compose screens, progress, filters, result details | Starter UI and local import screen |
-| Collector | Import files and retrieve resolver candidates from configured sources | Manual text import implemented; remote source fetcher planned |
+| UI | Compose screens, progress, filters, result details | Starter UI with local import and public list collection |
+| Collector | Import files and retrieve resolver candidates from configured sources | Manual import and HTTPS source fetcher implemented |
 | Domain | Resolver model, parsing and test outcomes | Resolver record and endpoint parser implemented |
 | Storage | Room / SQLite database and scan history | Room database implemented; scan history fields reserved |
 | Scanner | DNS transport probes and staged diagnostics | Not implemented |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Feasibility review required |
 | Export | Versioned formats and grouped export | Not implemented |
+
+## Public source collection
+
+The collector uses a small, reviewed HTTPS allowlist:
+
+- Public DNS Info CSV
+- Trickest Resolvers plain-text list
+
+Each source is downloaded independently with connection and read timeouts. A failed source does not cancel other source results. Response size and line count are capped to protect memory. The source identifier is saved on each imported resolver. Lists are untrusted candidate data: collection does not mean an endpoint is live, public, safe, or compatible with a tunnel.
 
 ## Local resolver record
 
