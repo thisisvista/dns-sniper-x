@@ -13,16 +13,20 @@ internal object DnsPacket {
     ): ByteArray {
         require(transactionId in 0..65_535) { "DNS transaction ID must be 16-bit" }
         require(!requestDnssec || includeEdns) { "DNSSEC requests require EDNS" }
-        val labels = name.trimEnd('.').split('.')
+        val normalizedName = name.trimEnd('.')
+        require(normalizedName.isNotEmpty() && normalizedName.all { it.code in 0x21..0x7e }) {
+            "DNS name must contain printable ASCII characters only"
+        }
+        val labels = normalizedName.split('.')
         require(labels.isNotEmpty() && labels.all { it.isNotEmpty() }) { "Invalid DNS name" }
         val encodedLabels = labels.map { label ->
             val bytes = label.toByteArray(Charsets.US_ASCII)
-            require(bytes.size in 1..63 && bytes.all { (it.toInt() and 0x80) == 0 }) {
-                "Invalid DNS label"
-            }
+            require(bytes.size in 1..63) { "Invalid DNS label" }
             bytes
         }
-        val questionSize = encodedLabels.sumOf { it.size + 1 } + 1 + 4
+        val wireNameLength = encodedLabels.sumOf { it.size + 1 } + 1
+        require(wireNameLength <= 255) { "DNS name is too long" }
+        val questionSize = wireNameLength + 4
         // EDNS(0) advertises a 1232-byte UDP payload to reduce IP fragmentation.
         val buffer = java.nio.ByteBuffer.allocate(12 + questionSize + if (includeEdns) 11 else 0)
             .order(java.nio.ByteOrder.BIG_ENDIAN)
