@@ -9,9 +9,13 @@ internal object DnsPacket {
         name: String,
         transactionId: Int,
         includeEdns: Boolean = true,
-        requestDnssec: Boolean = false
+        requestDnssec: Boolean = false,
+        queryType: Int = 1,
+        udpPayloadSize: Int = 1232
     ): ByteArray {
         require(transactionId in 0..65_535) { "DNS transaction ID must be 16-bit" }
+        require(queryType in 1..65_535) { "DNS query type must be a valid 16-bit value" }
+        require(udpPayloadSize in 512..4096) { "EDNS UDP payload size must be between 512 and 4096 bytes" }
         require(!requestDnssec || includeEdns) { "DNSSEC requests require EDNS" }
         val normalizedName = name.trimEnd('.')
         require(normalizedName.isNotEmpty() && normalizedName.all { it.code in 0x21..0x7e }) {
@@ -41,12 +45,12 @@ internal object DnsPacket {
             buffer.put(label)
         }
         buffer.put(0)
-        buffer.putShort(1)
+        buffer.putShort(queryType.toShort())
         buffer.putShort(1)
         if (includeEdns) {
             buffer.put(0)
             buffer.putShort(41)
-            buffer.putShort(1232)
+            buffer.putShort(udpPayloadSize.toShort())
             // EDNS flags: DO (DNSSEC OK) requests DNSSEC records; it does not
             // mean the resolver validates DNSSEC signatures.
             buffer.putInt(if (requestDnssec) 0x00008000 else 0)

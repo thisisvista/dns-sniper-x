@@ -27,6 +27,32 @@ class DnsPacketTest {
     }
 
     @Test
+    fun buildsDnskeyQueryWithCustomEdnsPayload() {
+        val query = DnsPacket.buildQuery(
+            "org",
+            7,
+            requestDnssec = true,
+            queryType = 48,
+            udpPayloadSize = 4096
+        )
+        val questionEnd = questionEndOffset(query)
+        assertEquals(48, ((query[questionEnd].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 1].toInt() and 0xff))
+        assertEquals(4096, ((query[questionEnd + 7].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 8].toInt() and 0xff))
+    }
+
+    @Test
+    fun rejectsEdnsPayloadOutsideSupportedDiagnosticRange() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.buildQuery("example.com", 1, udpPayloadSize = 500)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.buildQuery("example.com", 1, udpPayloadSize = 4097)
+        }
+    }
+
+    @Test
     fun acceptsMatchingDnsResponse() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOf().apply {

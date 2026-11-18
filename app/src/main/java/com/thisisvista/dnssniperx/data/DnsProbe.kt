@@ -85,12 +85,60 @@ object DnsProbe {
             } else {
                 ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
             }
-            addNxDomainDiagnostic(address, resolver.port, useTcp, baseResult)
+            val withEdnsDiagnostic = addEdnsPayloadDiagnostic(address, resolver.port, useTcp, baseResult)
+            addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
         } catch (exception: Exception) {
             ProbeResult("FAIL", detail = exception.message?.take(120) ?: "Network error")
         }
+    }
+
+    /**
+     * Compares DNSSEC-sized UDP answers with two EDNS payload advertisements.
+     * This is diagnostic only: a large response can be affected by path MTU,
+     * fragmentation, filtering, or the resolver's own response policy.
+     */
+    private fun addEdnsPayloadDiagnostic(
+        address: InetAddress,
+        port: Int,
+        useTcp: Boolean,
+        base: ProbeResult
+    ): ProbeResult {
+        if (useTcp) return base
+        fun attempt(payloadSize: Int): DnsPacket.ResponseInfo? = try {
+            val query = DnsPacket.buildQuery(
+                "org",
+                Random.nextInt(0, 65_536),
+                includeEdns = true,
+                requestDnssec = true,
+                queryType = 48, // DNSKEY
+                udpPayloadSize = payloadSize
+            )
+            val response = udpQuery(address, port, query)
+            DnsPacket.validateResponse(query, response)
+        } catch (_: Exception) {
+            null
+        }
+
+        val standard = attempt(1232)
+        val large = attempt(4096)
+        val diagnostic = when {
+            standard?.status == "PASS" && large?.status == "PASS" ->
+                "EDNS payload check: DNSSEC-sized UDP answer succeeded at 1232 and 4096 bytes"
+            standard?.status == "TRUNCATED" && large?.status == "PASS" ->
+                "EDNS payload check: 1232-byte response truncated; 4096-byte request succeeded"
+            standard?.status == "PASS" && large?.status == "TRUNCATED" ->
+                "EDNS payload check: 1232-byte request succeeded; 4096-byte response was truncated"
+            standard == null && large == null ->
+                "EDNS payload check unavailable (DNSKEY query timed out or failed)"
+            else -> {
+                val a = standard?.let { "1232=" + it.status + "/RCODE" + it.responseCode } ?: "1232=unavailable"
+                val b = large?.let { "4096=" + it.status + "/RCODE" + it.responseCode } ?: "4096=unavailable"
+                "EDNS payload check inconclusive (" + a + "; " + b + ")"
+            }
+        }
+        return base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
     }
 
     /**
