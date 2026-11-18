@@ -20,13 +20,15 @@ internal object DnsPacket {
             bytes
         }
         val questionSize = encodedLabels.sumOf { it.size + 1 } + 1 + 4
-        val buffer = ByteBuffer.allocate(12 + questionSize).order(ByteOrder.BIG_ENDIAN)
+        // EDNS(0) advertises a 1232-byte UDP payload to reduce IP fragmentation.
+        val optRecordSize = 11
+        val buffer = ByteBuffer.allocate(12 + questionSize + optRecordSize).order(ByteOrder.BIG_ENDIAN)
         buffer.putShort(transactionId.toShort())
         buffer.putShort(0x0100.toShort())
         buffer.putShort(1)
         buffer.putShort(0)
         buffer.putShort(0)
-        buffer.putShort(0)
+        buffer.putShort(1) // one additional record: EDNS OPT
         encodedLabels.forEach { label ->
             buffer.put(label.size.toByte())
             buffer.put(label)
@@ -34,6 +36,14 @@ internal object DnsPacket {
         buffer.put(0)
         buffer.putShort(1) // A
         buffer.putShort(1) // IN
+
+        // OPT pseudo-record: root name, TYPE=41, UDP payload size=1232,
+        // extended RCODE/version/flags=0, RDLEN=0.
+        buffer.put(0)
+        buffer.putShort(41)
+        buffer.putShort(1232)
+        buffer.putInt(0)
+        buffer.putShort(0)
         return buffer.array()
     }
 
