@@ -87,7 +87,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             message = message,
             isCollecting = isCollecting,
             isScanning = isScanning,
-            onCollectNetworkDns = {
+            onCollectNetworkDns = { provider ->
                 scope.launch {
                     try {
                         val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -100,9 +100,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         if (addresses.isEmpty()) {
                             message = "No DNS servers were exposed by the active network."
                         } else {
-                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network")
+                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network (user label: $provider)")
                             val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
-                            message = "Detected ${addresses.size} DNS server(s) from the active network; saved $inserted new entr(y/ies). These are network-provided settings, not verified ISP ownership."
+                            message = "Detected ${addresses.size} DNS server(s); saved $inserted new entr(y/ies) with the user-selected label: $provider. ISP ownership is not verified."
                         }
                     } catch (exception: Exception) {
                         message = "Could not read current network DNS: ${exception.message ?: "Unknown error"}"
@@ -207,11 +207,12 @@ private fun HomeContent(
     isCollecting: Boolean,
     isScanning: Boolean,
     onCollect: () -> Unit,
-    onCollectNetworkDns: () -> Unit,
+    onCollectNetworkDns: (String) -> Unit,
     onScan: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
+    var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
     val filteredResolvers = resolvers.filter { resolver ->
@@ -246,8 +247,15 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollectNetworkDns, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
-            Text("Detect DNS from current network")
+        Text("Optional network label", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text("Choose the network provider you are currently using. This is a user label, not automatic ISP verification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Unspecified", "Irancell", "MCI", "Rightel", "TCI", "Shatel", "Asiatech", "Sabanet", "Pars Online", "Other").forEach { provider ->
+                FilterChip(selected = selectedProvider == provider, onClick = { selectedProvider = provider }, label = { Text(provider) })
+            }
+        }
+        Button(onClick = { onCollectNetworkDns(selectedProvider) }, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+            Text("Detect and save current network DNS")
         }
         Text(
             "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",
