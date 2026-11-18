@@ -48,10 +48,32 @@ object DnsProbe {
         val started = System.nanoTime()
         return try {
             val address = InetAddress.getByName(resolver.address)
-            val query = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536))
+            val transactionId = Random.nextInt(0, 65_536)
+            val query = DnsPacket.buildQuery(TEST_NAME, transactionId, includeEdns = true)
             val response = if (useTcp) tcpQuery(address, resolver.port, query)
                 else udpQuery(address, resolver.port, query)
             val validation = DnsPacket.validateResponse(query, response)
+
+            // Some older DNS servers reject EDNS with FORMERR or NOTIMP.
+            // Retry once without OPT so a usable legacy resolver is not discarded.
+            if (validation.status == "DNS_ERROR" &&
+                (validation.responseCode == 1 || validation.responseCode == 4)
+            ) {
+                val legacyQuery = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536), includeEdns = false)
+                val legacyResponse = if (useTcp) tcpQuery(address, resolver.port, legacyQuery)
+                    else udpQuery(address, resolver.port, legacyQuery)
+                val legacyValidation = DnsPacket.validateResponse(legacyQuery, legacyResponse)
+                val fallbackDetail = if (legacyValidation.status == "PASS") {
+                    "EDNS was rejected (RCODE ${validation.responseCode}); legacy DNS query succeeded. ${legacyValidation.detail}"
+                } else {
+                    "EDNS was rejected (RCODE ${validation.responseCode}); legacy retry: ${legacyValidation.detail}"
+                }
+                return ProbeResult(
+                    legacyValidation.status,
+                    (System.nanoTime() - started) / 1_000_000,
+                    fallbackDetail
+                )
+            }
             ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
