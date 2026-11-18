@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
@@ -56,6 +57,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var importText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
+    var isScanning by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -75,6 +77,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             onImportTextChange = { importText = it },
             message = message,
             isCollecting = isCollecting,
+            isScanning = isScanning,
             onCollect = {
                 if (!isCollecting) {
                     scope.launch {
@@ -97,6 +100,48 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             message = "Collection failed: ${exception.message ?: "Unknown error"}"
                         } finally {
                             isCollecting = false
+                        }
+                    }
+                }
+            },
+            onScan = {
+                if (!isScanning && resolvers.isNotEmpty()) {
+                    scope.launch {
+                        isScanning = true
+                        message = "Testing up to 100 saved DNS entries over UDP and TCP…"
+                        try {
+                            val results = DnsProbe.scan(resolvers)
+                            results.forEach { result ->
+                                val best = listOfNotNull(result.udp.latencyMs, result.tcp.latencyMs).minOrNull()
+                                val overall = when {
+                                    result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
+                                    result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
+                                    else -> "FAILED"
+                                }
+                                val notes = listOfNotNull(
+                                    result.udp.detail?.let { "UDP: $it" },
+                                    result.tcp.detail?.let { "TCP: $it" }
+                                ).joinToString("; ").take(240).ifBlank { null }
+                                dao.updateScanResult(
+                                    id = result.resolverId,
+                                    udpStatus = result.udp.status,
+                                    udpLatencyMs = result.udp.latencyMs,
+                                    tcpStatus = result.tcp.status,
+                                    tcpLatencyMs = result.tcp.latencyMs,
+                                    testedAt = System.currentTimeMillis(),
+                                    overallStatus = overall,
+                                    bestLatency = best,
+                                    note = notes
+                                )
+                            }
+                            val udpPass = results.count { it.udp.status == "PASS" }
+                            val tcpPass = results.count { it.tcp.status == "PASS" }
+                            message = "Tested ${results.size} DNS entries. UDP passed: $udpPass; TCP passed: $tcpPass."
+                            if (resolvers.size > 100) message += " Scan is limited to the first 100 entries per run."
+                        } catch (exception: Exception) {
+                            message = "Scan failed: ${exception.message ?: "Unknown error"}"
+                        } finally {
+                            isScanning = false
                         }
                     }
                 }
@@ -129,7 +174,9 @@ private fun HomeContent(
     onImportTextChange: (String) -> Unit,
     message: String,
     isCollecting: Boolean,
+    isScanning: Boolean,
     onCollect: () -> Unit,
+    onScan: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -154,13 +201,24 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollect, enabled = !isCollecting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
-            } else {
-                Text("Fetch public DNS lists")
-            }
+            } else Text("Fetch public DNS lists")
+        }
+
+        Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Sends a small standard DNS query to each saved address over UDP and TCP. Up to 100 entries are tested per run, with limited parallel connections.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(onClick = onScan, enabled = count > 0 && !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+            if (isScanning) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                Text("  Scanning…")
+            } else Text("Scan saved DNS (UDP + TCP)")
         }
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
@@ -178,7 +236,7 @@ private fun HomeContent(
             label = { Text("DNS addresses") },
             placeholder = { Text("1.1.1.1\n8.8.8.8:53\n[2001:db8::1]:53") }
         )
-        Button(onClick = onImport, enabled = importText.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
             Text("Import to local library")
         }
 
@@ -194,10 +252,16 @@ private fun HomeContent(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("${resolver.address}:${resolver.port}", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Status: Not tested • Source: ${resolver.source}",
+                            "UDP: ${resolver.udpStatus}${resolver.udpLatencyMs?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Text(
+                            "TCP: ${resolver.tcpStatus}${resolver.tcpLatencyMs?.let { " • ${it} ms" } ?: ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text("Source: ${resolver.source}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { onDelete(resolver.id) }) { Text("Remove") }
                     }
                 }
@@ -206,7 +270,7 @@ private fun HomeContent(
         }
 
         Text(
-            "Public list collection and local storage are active. Network scanning and tunnel compatibility tests are not implemented yet.",
+            "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp)

@@ -4,64 +4,40 @@
 
 DNS SniperX is an independent Android application. SlipNet is a possible destination for exported resolver results; DNS SniperX does not depend on SlipNet being installed.
 
-The first release targets Android only. Keep core logic independent from Android UI APIs where practical so a future desktop implementation can reuse tested logic.
-
-## Layers and current status
+## Layers
 
 | Layer | Responsibility | Status |
 |---|---|---|
-| UI | Compose screens, progress, filters, result details | Starter UI with local import and public list collection |
-| Collector | Import files and retrieve resolver candidates from configured sources | Manual import and HTTPS source fetcher implemented |
-| Domain | Resolver model, parsing and test outcomes | Resolver record and endpoint parser implemented |
-| Storage | Room / SQLite database and scan history | Room database implemented; scan history fields reserved |
-| Scanner | DNS transport probes and staged diagnostics | Not implemented |
-| Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Feasibility review required |
+| UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls |
+| Collector | Retrieve resolver candidates from configured sources | HTTPS allowlist implemented |
+| Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
+| Storage | Room / SQLite database | Resolver library and migration to scan-result columns |
+| Scanner | DNS transport probes | UDP and TCP query probes implemented |
+| Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
 | Export | Versioned formats and grouped export | Not implemented |
 
-## Public source collection
+## DNS probe behaviour
 
-The collector uses a small, reviewed HTTPS allowlist:
+The scanner sends a small recursive A query for `example.com` to each saved endpoint over UDP and TCP. It checks the DNS transaction ID, response bit and opcode, and records separate status and latency for each transport. A maximum of 100 entries are processed per run, with at most 8 resolver probes active concurrently and a 1.8 second socket timeout.
 
-- Public DNS Info CSV
-- Trickest Resolvers plain-text list
+The test runs through Android's currently active network route. Results may differ between mobile operators, Wi-Fi networks, locations and times. The probe does not perform broad address-range scanning.
 
-Each source is downloaded independently with connection and read timeouts. A failed source does not cancel other source results. Response size and line count are capped to protect memory. The source identifier is saved on each imported resolver. Lists are untrusted candidate data: collection does not mean an endpoint is live, public, safe, or compatible with a tunnel.
+A valid DNS response proves only DNS reachability on that transport. It does not establish tunnel delegation, EDNS compatibility, DNSTT/Slipstream support, or end-to-end connectivity.
 
-## Local resolver record
+## Result meanings
 
-Each saved record contains address, port, source, collection time, status, optional last-test time, latency and note. The database deduplicates by address and port. An IP address does not identify a transport, so UDP and TCP results must be modelled separately when scanning is added.
+1. **DNS reachability:** a valid response to the test DNS question was received.
+2. **Tunnel compatibility:** requires additional protocol-specific checks; not implemented yet.
+3. **End-to-end success:** requires a real client and controlled test server; not implemented yet.
 
-## Result model: keep the meanings separate
+## Database migration
 
-A resolver must not be labelled "tunnel working" just because it answers a DNS query.
+Schema version 2 adds independent UDP and TCP status/latency columns while retaining the original aggregate fields. Existing version 1 user databases are migrated in place.
 
-1. **DNS reachability:** a valid DNS response was received using a specific transport.
-2. **Tunnel compatibility:** the resolver passed the relevant protocol-specific checks.
-3. **End-to-end success:** a real test tunnel completed against a controlled, valid test server and client configuration.
-
-Each result should include the test time, network context, transport, latency, and failure reason where available. Results are time-sensitive and should be re-tested rather than permanently discarded.
-
-## Scanner safety and network behaviour
+## Safety and network behaviour
 
 - Use public lists, user-provided imports, and sources whose terms permit collection.
-- Deduplicate candidates but retain source provenance.
 - Apply concurrency limits, timeouts, and rate limits.
 - Do not perform broad, indiscriminate IP-range scans.
-- Do not infer country or operator from an address unless the source is reliable.
-- A scan result applies to the network on which it was tested; results can differ by SIM operator, Wi-Fi, location, and time.
-
-## Offline behaviour
-
-Offline mode means the user can browse and manage the local resolver database. It does not mean the app can discover new internet resolvers or prove external connectivity while no route to those servers exists.
-
-## Findns evaluation
-
-Findns may provide useful Go DNS-scanning logic, but it is not an Android application. Before adapting any code:
-
-1. inspect the exact source files and dependency graph;
-2. identify which packages are independent of CLI/TUI code;
-3. verify Android ARM64 build feasibility and runtime behaviour;
-4. retain the MIT license and copyright notice for any reused code;
-5. compare its checks with the app's explicit result categories.
-
-No Findns code is included in this implementation. Reuse is a later, evidence-based decision.
+- A scan result applies only to the network on which it was tested.
+- Offline mode allows browsing the local library; it cannot discover new external resolvers or prove external connectivity without a route.
