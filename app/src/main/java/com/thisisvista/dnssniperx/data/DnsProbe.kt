@@ -57,7 +57,7 @@ object DnsProbe {
             // Some older DNS servers reject EDNS with FORMERR or NOTIMP.
             // Retry once without OPT so a usable legacy resolver is not discarded.
             if (validation.status == "DNS_ERROR" &&
-                (validation.responseCode == 1 || validation.responseCode == 4)
+                (validation.responseCode == 1 || validation.responseCode == 4 || validation.responseCode == 16)
             ) {
                 val legacyQuery = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536), includeEdns = false)
                 val legacyResponse = if (useTcp) tcpQuery(address, resolver.port, legacyQuery)
