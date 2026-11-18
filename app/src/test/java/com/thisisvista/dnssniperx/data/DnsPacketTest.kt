@@ -58,6 +58,45 @@ class DnsPacketTest {
         }
     }
 
+
+    @Test
+    fun identifiesNxDomainAsDnsError() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x83.toByte()
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("DNS_ERROR", result.status)
+        org.junit.Assert.assertTrue(result.detail.contains("NXDOMAIN"))
+    }
+
+    @Test
+    fun identifiesNoAnswerResponse() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("NO_ANSWER", result.status)
+    }
+
+    @Test
+    fun identifiesTruncatedUdpResponse() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x83.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("TRUNCATED", result.status)
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
