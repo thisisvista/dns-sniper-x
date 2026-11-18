@@ -110,8 +110,9 @@ internal object DnsPacket {
         val authorities = unsignedShort(packet, 8)
         val additionals = unsignedShort(packet, 10)
 
+        val knownLabelOffsets = mutableSetOf<Int>()
         repeat(questions) {
-            offset = skipName(packet, offset)
+            offset = skipName(packet, offset, knownLabelOffsets)
             require(offset + 4 <= packet.size) { "Truncated DNS question" }
             offset += 4
         }
@@ -175,6 +176,7 @@ internal object DnsPacket {
             val length = packet[offset].toInt() and 0xff
             when {
                 length == 0 -> {
+                    knownLabelOffsets += offset
                     expandedLength += 1
                     require(expandedLength <= 255) { "DNS name is too long" }
                     return NameInfo(labels.joinToString("."), nextOffset ?: (offset + 1))
