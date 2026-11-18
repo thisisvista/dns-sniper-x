@@ -214,6 +214,35 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun rejectsResponseForDifferentQuestionName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[13] = 'x'.code.toByte() // "xample.com" instead of "example.com"
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
+    fun rejectsResponseForDifferentQuestionType() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            val typeOffset = questionEndOffset(this)
+            this[typeOffset + 1] = 28 // AAAA instead of A
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
