@@ -306,6 +306,22 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun rejectsEdnsOptRecordOutsideAdditionalSection() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            // An OPT RR is not valid in the Answer section.
+            addAll(listOf(0, 0, 41, 4, 208, 0, 0, 0, 0, 0, 0).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
