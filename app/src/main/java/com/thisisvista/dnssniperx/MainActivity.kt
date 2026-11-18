@@ -68,6 +68,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val resolvers by dao.observeAll().collectAsState(initial = emptyList())
     val count by dao.observeCount().collectAsState(initial = 0)
     var importText by rememberSaveable { mutableStateOf("") }
+    var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
     var isScanning by rememberSaveable { mutableStateOf(false) }
@@ -75,6 +76,21 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val txtExportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                    writer.write(pendingExportText)
+                } ?: error("Could not create the selected file.")
+                val exportedCount = pendingExportText.lineSequence().count { it.isNotBlank() && !it.startsWith("#") }
+                message = "Exported $exportedCount working DNS entries to TXT."
+            } catch (exception: Exception) {
+                message = "TXT export failed: ${exception.message ?: "Could not write file"}"
+            }
+        }
+    }
     val txtFilePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -233,6 +249,20 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 }
             },
             onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
+            onExportHealthy = {
+                val healthy = resolvers.filter { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
+                if (healthy.isEmpty()) {
+                    message = "No working DNS entries are available to export yet. Run a scan first."
+                } else {
+                    pendingExportText = buildString {
+                        appendLine("# DNS SniperX - working DNS resolvers")
+                        appendLine("# Exported: ${java.time.Instant.now()}")
+                        appendLine("# A resolver is included when UDP or TCP returned a valid DNS response.")
+                        healthy.forEach { appendLine(if (it.port == 53) it.address else "${it.address}:${it.port}") }
+                    }
+                    txtExportPicker.launch("dns-sniperx-working.txt")
+                }
+            },
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
                 scope.launch {
@@ -267,6 +297,7 @@ private fun HomeContent(
     onCollectNetworkDns: (String) -> Unit,
     onScan: () -> Unit,
     onImportFile: () -> Unit,
+    onExportHealthy: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -383,6 +414,9 @@ private fun HomeContent(
         }
 
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Button(onClick = onExportHealthy, enabled = !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+            Text("Export working DNS as TXT")
+        }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested").forEach { (key, label) ->
                 FilterChip(selected = selectedFilter == key, onClick = { selectedFilter = key }, label = { Text(label) })
