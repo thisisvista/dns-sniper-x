@@ -219,9 +219,6 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     completed += results.size
                                     scanProgress = "$completed / ${pending.size}"
                                 }
-                                val udpSummary = summarizeStatuses(pending.mapNotNull { item ->
-                                    resolvers.firstOrNull { it.id == item.id }?.udpStatus
-                                })
                                 message = "Scan complete: $completed DNS entries tested and saved. New entries can be scanned in the next run."
                             } catch (cancelled: CancellationException) {
                                 message = "Scan paused. Completed batches were saved; press Resume to continue with remaining untested DNS entries."
@@ -266,6 +263,7 @@ private fun HomeContent(
     message: String,
     isCollecting: Boolean,
     isScanning: Boolean,
+    scanProgress: String,
     onCollect: () -> Unit,
     onCollectNetworkDns: (String) -> Unit,
     onScan: () -> Unit,
@@ -358,12 +356,10 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onScan, enabled = count > 0 && !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
-            if (isScanning) {
-                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Scanning…")
-            } else Text("Scan saved DNS (UDP + TCP)")
+        Button(onClick = onScan, enabled = count > 0 && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+            if (isScanning) Text("Pause scan") else Text("Scan / Resume untested DNS (UDP + TCP)")
         }
+        if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
         Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
