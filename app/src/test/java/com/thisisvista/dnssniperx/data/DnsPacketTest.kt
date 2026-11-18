@@ -83,7 +83,6 @@ class DnsPacketTest {
         }
     }
 
-
     @Test
     fun identifiesNxDomainAsDnsError() {
         val query = DnsPacket.buildQuery("example.com", 42)
@@ -122,7 +121,6 @@ class DnsPacketTest {
         assertEquals("TRUNCATED", result.status)
     }
 
-
     @Test
     fun reportsEdnsWhenServerReturnsOptRecord() {
         val query = DnsPacket.buildQuery("example.com", 42)
@@ -148,7 +146,6 @@ class DnsPacketTest {
         val result = DnsPacket.validateResponse(query, response)
         org.junit.Assert.assertTrue(result.detail.contains("EDNS not advertised"))
     }
-
 
     @Test
     fun rejectsForwardDnsCompressionPointers() {
@@ -262,7 +259,10 @@ class DnsPacketTest {
     fun rejectsCompressionPointerIntoLabelPayload() {
         // The byte at offset 13 is deliberately 3, which looks like a valid
         // label length but is actually the first byte inside the "name" label.
-        val query = DnsPacket.buildQuery("\u0003bc.com", 42)
+        // Mutate a valid ASCII-built packet so the test reaches pointer validation.
+        val query = DnsPacket.buildQuery("abc.com", 42).apply {
+            this[13] = 3
+        }
         val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
             this[2] = 0x81.toByte()
             this[3] = 0x80.toByte()
