@@ -22,9 +22,29 @@ object ResolverCollector {
     private const val MAX_LINES_PER_SOURCE = 25_000
     private const val MAX_CHARS_PER_SOURCE = 4_000_000
 
+    // Regional entries are listed first so their regional provenance is retained
+    // when the same resolver also appears in a global source.
     val sources = listOf(
-        ResolverSource("public-dns-info", "https://public-dns.info/nameservers.csv", "Public DNS Info"),
-        ResolverSource("trickest-resolvers", "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt", "Trickest Resolvers")
+        ResolverSource(
+            "iran-public-dns-directory",
+            "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt",
+            "Iran public DNS directory"
+        ),
+        ResolverSource(
+            "public-dns-info",
+            "https://public-dns.info/nameservers.csv",
+            "Public DNS Info"
+        ),
+        ResolverSource(
+            "trickest-resolvers",
+            "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt",
+            "Trickest Resolvers"
+        ),
+        ResolverSource(
+            "global-public-dns-directory",
+            "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt",
+            "Global public DNS directory"
+        )
     )
 
     suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
