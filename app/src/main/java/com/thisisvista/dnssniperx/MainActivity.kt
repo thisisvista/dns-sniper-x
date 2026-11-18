@@ -306,6 +306,7 @@ private fun HomeContent(
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
     var selectedProviderLabel by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
+    var visibleResolverLimit by rememberSaveable { mutableStateOf(100) }
     val networkTypes = resolvers.mapNotNull { resolver ->
         resolver.source.takeIf { it.startsWith("current-network (") }
             ?.substringAfter("current-network (")?.substringBefore(";")
@@ -476,7 +477,7 @@ private fun HomeContent(
         } else if (filteredResolvers.isEmpty()) {
             Text("No DNS entries match this filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            filteredResolvers.take(100).forEach { resolver ->
+            filteredResolvers.take(visibleResolverLimit).forEach { resolver ->
                 val sourceDescription = if (resolver.source.startsWith("current-network (")) {
                     val networkType = resolver.source.substringAfter("current-network (").substringBefore(";")
                     val providerLabel = resolver.source.substringAfter("user label: ", "Unspecified").substringBefore(")")
@@ -508,7 +509,15 @@ private fun HomeContent(
                     }
                 }
             }
-            if (filteredResolvers.size > 100) Text("Showing the first 100 matching entries.", style = MaterialTheme.typography.bodySmall)
+            if (filteredResolvers.size > visibleResolverLimit) {
+                Text("Showing ${visibleResolverLimit} of ${filteredResolvers.size} matching entries.", style = MaterialTheme.typography.bodySmall)
+                Button(
+                    onClick = { visibleResolverLimit += 100 },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Show 100 more DNS entries")
+                }
+            }
         }
 
         Text(
