@@ -8,7 +8,9 @@ import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,6 +71,30 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var isScanning by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val txtFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val contents = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.use { it.readText() }
+                        ?: error("Could not open the selected file.")
+                    val parsed = ResolverListParser.parse(contents, source = "txt-import")
+                    val inserted = if (parsed.isEmpty()) 0 else dao.insertIgnore(parsed).count { it != -1L }
+                    val skipped = parsed.size - inserted
+                    message = when {
+                        parsed.isEmpty() -> "No valid DNS entries found in the TXT file."
+                        inserted == 0 -> "The file contained ${parsed.size} valid entries, but all were already saved."
+                        skipped > 0 -> "Imported $inserted new DNS entries from TXT; skipped $skipped duplicates."
+                        else -> "Imported $inserted DNS entries from TXT successfully."
+                    }
+                } catch (exception: Exception) {
+                    message = "TXT import failed: ${exception.message ?: "Could not read file"}"
+                }
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -185,6 +211,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     }
                 }
             },
+            onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
                 scope.launch {
@@ -217,6 +244,7 @@ private fun HomeContent(
     onCollect: () -> Unit,
     onCollectNetworkDns: (String) -> Unit,
     onScan: () -> Unit,
+    onImportFile: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -319,6 +347,9 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Button(onClick = onImportFile, enabled = !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+            Text("Choose TXT file")
+        }
         OutlinedTextField(
             value = importText,
             onValueChange = onImportTextChange,
