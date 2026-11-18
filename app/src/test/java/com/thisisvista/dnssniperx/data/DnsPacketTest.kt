@@ -132,6 +132,23 @@ class DnsPacketTest {
 
 
     @Test
+    fun rejectsForwardDnsCompressionPointers() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            add(0xc0.toByte()) // answer owner name: compression pointer
+            add(0xff.toByte()) // points beyond this record
+            addAll(listOf(0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
     fun buildsLegacyQueryWithoutEdnsOptRecord() {
         val query = DnsPacket.buildQuery("example.com", 42, includeEdns = false)
         assertEquals(0, query[10].toInt() and 0xff)
