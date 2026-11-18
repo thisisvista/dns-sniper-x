@@ -100,7 +100,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         if (addresses.isEmpty()) {
                             message = "No DNS servers were exposed by the active network."
                         } else {
-                            val entries = ResolverListParser.parse(addresses.joinToString("\\n"), "current-network")
+                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network")
                             val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
                             message = "Detected ${addresses.size} DNS server(s) from the active network; saved $inserted new entr(y/ies). These are network-provided settings, not verified ISP ownership."
                         }
@@ -246,7 +246,15 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollectNetworkDns, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {\n            Text("Detect DNS from current network")\n        }\n        Text(\n            "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",\n            style = MaterialTheme.typography.bodySmall,\n            color = MaterialTheme.colorScheme.onSurfaceVariant\n        )\n        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onCollectNetworkDns, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+            Text("Detect DNS from current network")
+        }
+        Text(
+            "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
