@@ -118,7 +118,7 @@ internal object DnsPacket {
 
         var opt: EdnsInfo? = null
         repeat(answers + authorities + additionals) { index ->
-            offset = skipName(packet, offset)
+            offset = skipName(packet, offset, knownLabelOffsets)
             require(offset + 10 <= packet.size) { "Truncated DNS resource record" }
             val type = unsignedShort(packet, offset)
             val recordClass = unsignedShort(packet, offset + 2)
@@ -150,10 +150,18 @@ internal object DnsPacket {
      */
     private data class NameInfo(val value: String, val nextOffset: Int)
 
-    private fun skipName(packet: ByteArray, start: Int): Int = readName(packet, start).nextOffset
+    private fun skipName(
+        packet: ByteArray,
+        start: Int,
+        knownLabelOffsets: MutableSet<Int>
+    ): Int = readName(packet, start, knownLabelOffsets).nextOffset
 
-    /** Decodes a DNS name, following only bounded backward compression pointers. */
-    private fun readName(packet: ByteArray, start: Int): NameInfo {
+    /** Decodes a DNS name, following only backward pointers to previously parsed label boundaries. */
+    private fun readName(
+        packet: ByteArray,
+        start: Int,
+        knownLabelOffsets: MutableSet<Int> = mutableSetOf()
+    ): NameInfo {
         var offset = start
         var nextOffset: Int? = null
         var expandedLength = 0
@@ -177,11 +185,15 @@ internal object DnsPacket {
                     require(pointer >= 12 && pointer < offset) {
                         "DNS compression pointer must reference an earlier name"
                     }
+                    require(pointer in knownLabelOffsets) {
+                        "DNS compression pointer must reference a known label boundary"
+                    }
                     if (nextOffset == null) nextOffset = offset + 2
                     offset = pointer
                 }
                 (length and 0xc0) != 0 -> throw IllegalArgumentException("Invalid DNS label length")
                 else -> {
+                    knownLabelOffsets += offset
                     require(offset + 1 + length <= packet.size) { "Truncated DNS label" }
                     expandedLength += length + 1
                     require(expandedLength <= 255) { "DNS name is too long" }
