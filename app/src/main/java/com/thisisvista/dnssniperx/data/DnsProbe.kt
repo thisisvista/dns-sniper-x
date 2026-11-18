@@ -23,7 +23,7 @@ data class ResolverScanResult(val resolverId: Long, val udp: ProbeResult, val tc
 object DnsProbe {
     private const val TIMEOUT_MS = 1_800
     private const val MAX_PARALLEL_RESOLVERS = 8
-    private const val MAX_BATCH_SIZE = 100
+    private const val MAX_BATCH_SIZE = 500
     private const val TEST_NAME = "example.com"
 
     suspend fun scan(resolvers: List<ResolverEntity>): List<ResolverScanResult> =
