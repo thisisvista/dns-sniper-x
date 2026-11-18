@@ -5,7 +5,7 @@ package com.thisisvista.dnssniperx.data
  * and response validation can be covered by local unit tests.
  */
 internal object DnsPacket {
-    fun buildQuery(name: String, transactionId: Int): ByteArray {
+    fun buildQuery(name: String, transactionId: Int, includeEdns: Boolean = true): ByteArray {
         require(transactionId in 0..65_535) { "DNS transaction ID must be 16-bit" }
         val labels = name.trimEnd('.').split('.')
         require(labels.isNotEmpty() && labels.all { it.isNotEmpty() }) { "Invalid DNS name" }
@@ -18,14 +18,14 @@ internal object DnsPacket {
         }
         val questionSize = encodedLabels.sumOf { it.size + 1 } + 1 + 4
         // EDNS(0) advertises a 1232-byte UDP payload to reduce IP fragmentation.
-        val buffer = java.nio.ByteBuffer.allocate(12 + questionSize + 11)
+        val buffer = java.nio.ByteBuffer.allocate(12 + questionSize + if (includeEdns) 11 else 0)
             .order(java.nio.ByteOrder.BIG_ENDIAN)
         buffer.putShort(transactionId.toShort())
         buffer.putShort(0x0100.toShort())
         buffer.putShort(1)
         buffer.putShort(0)
         buffer.putShort(0)
-        buffer.putShort(1)
+        buffer.putShort(if (includeEdns) 1 else 0)
         encodedLabels.forEach { label ->
             buffer.put(label.size.toByte())
             buffer.put(label)
@@ -33,15 +33,17 @@ internal object DnsPacket {
         buffer.put(0)
         buffer.putShort(1)
         buffer.putShort(1)
-        buffer.put(0)
-        buffer.putShort(41)
-        buffer.putShort(1232)
-        buffer.putInt(0)
-        buffer.putShort(0)
+        if (includeEdns) {
+            buffer.put(0)
+            buffer.putShort(41)
+            buffer.putShort(1232)
+            buffer.putInt(0)
+            buffer.putShort(0)
+        }
         return buffer.array()
     }
 
-    data class ResponseInfo(val status: String, val detail: String)
+    data class ResponseInfo(val status: String, val detail: String, val responseCode: Int)
     private data class EdnsInfo(val extendedRcode: Int, val description: String)
 
     fun validateResponse(query: ByteArray, response: ByteArray): ResponseInfo {
@@ -66,10 +68,10 @@ internal object DnsPacket {
         }
         val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${edns.description}"
         return when {
-            (flags and 0x0200) != 0 -> ResponseInfo("TRUNCATED", "${detail}; UDP response was truncated")
-            responseCode != 0 -> ResponseInfo("DNS_ERROR", detail)
-            answerCount == 0 -> ResponseInfo("NO_ANSWER", "${detail}; valid response without an answer")
-            else -> ResponseInfo("PASS", detail)
+            (flags and 0x0200) != 0 -> ResponseInfo("TRUNCATED", "${detail}; UDP response was truncated", responseCode)
+            responseCode != 0 -> ResponseInfo("DNS_ERROR", detail, responseCode)
+            answerCount == 0 -> ResponseInfo("NO_ANSWER", "${detail}; valid response without an answer", responseCode)
+            else -> ResponseInfo("PASS", detail, responseCode)
         }
     }
 
