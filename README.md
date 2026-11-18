@@ -10,6 +10,7 @@ An independent Android app for collecting, storing, testing and exporting DNS re
 - DNS probes send a standard `example.com A` query over UDP and TCP, validate the DNS response header and transaction ID, measure response time, and store separate transport results.
 - Scanning is limited to 100 saved entries per run and 8 concurrent resolvers with short timeouts.
 - Debug APK is uploaded as a GitHub Actions artifact after a successful build.
+- Current-network DNS detection can save a user-selected provider label (Irancell, MCI, Rightel, TCI, Shatel, Asiatech, Sabanet, Pars Online, or Other). The label is explicitly user-provided and is not proof of IP ownership.
 - **DNS reachability is not DNSTT/Slipstream compatibility.** Tunnel end-to-end checks and SlipNet export are not implemented yet.
 
 ## Public collection sources
@@ -27,6 +28,10 @@ These are candidate lists only. Their contents may include stale or unreachable 
 - UDP and TCP outcomes are stored separately.
 
 The scanner tests the network currently used by Android. A passing DNS query does not prove that a tunnel can be established.
+
+## Network provider labels
+
+When collecting DNS settings from the active Android network, the user may optionally choose a provider label. This records the user's own description of the current connection; it does not identify the ISP from the IP address, validate ownership, or independently detect the carrier. Use `Unspecified` when unsure.
 
 ## Import format
 
