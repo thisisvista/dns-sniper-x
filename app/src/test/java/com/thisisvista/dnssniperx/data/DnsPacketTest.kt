@@ -185,6 +185,35 @@ class DnsPacketTest {
         org.junit.Assert.assertTrue(result.detail.contains("BADVERS"))
     }
 
+    @Test
+    fun acceptsValidBackwardCompressionPointer() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            addAll(listOf(0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("PASS", result.status)
+    }
+
+    @Test
+    fun rejectsCompressionPointerIntoLabelPayload() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            addAll(listOf(0xc0, 0x0d, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
