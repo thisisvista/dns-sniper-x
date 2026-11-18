@@ -169,6 +169,22 @@ class DnsPacketTest {
         assertEquals(1, result.responseCode)
     }
 
+    @Test
+    fun exposesBadversExtendedResponseCode() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            val ttlOffset = questionEndOffset(this) + 9
+            this[ttlOffset] = 1 // EDNS extended RCODE high byte: BADVERS (16)
+        }
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("DNS_ERROR", result.status)
+        assertEquals(16, result.responseCode)
+        org.junit.Assert.assertTrue(result.detail.contains("BADVERS"))
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
