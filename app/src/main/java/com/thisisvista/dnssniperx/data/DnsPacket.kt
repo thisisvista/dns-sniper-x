@@ -123,7 +123,8 @@ internal object DnsPacket {
 
         var opt: EdnsInfo? = null
         repeat(answers + authorities + additionals) { index ->
-            offset = skipName(packet, offset, knownLabelOffsets)
+            val owner = readName(packet, offset, knownLabelOffsets)
+            offset = owner.nextOffset
             require(offset + 10 <= packet.size) { "Truncated DNS resource record" }
             val type = unsignedShort(packet, offset)
             val recordClass = unsignedShort(packet, offset + 2)
@@ -132,7 +133,12 @@ internal object DnsPacket {
             val dataStart = offset + 10
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
 
-            if (index >= answers + authorities && type == 41) {
+            if (type == 41) {
+                require(index >= answers + authorities) {
+                    "EDNS OPT record must appear in the Additional section"
+                }
+                require(owner.value.isEmpty()) { "EDNS OPT record owner name must be root" }
+                require(opt == null) { "DNS response contains multiple EDNS OPT records" }
                 val version = ((ttl ushr 16) and 0xff).toInt()
                 val extendedRcode = ((ttl ushr 24) and 0xff).toInt()
                 val ednsFlags = (ttl and 0xffff).toInt()
