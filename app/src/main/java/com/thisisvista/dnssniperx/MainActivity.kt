@@ -318,6 +318,7 @@ private fun HomeContent(
     val udpPassCount = resolvers.count { it.udpStatus == "PASS" }
     val tcpPassCount = resolvers.count { it.tcpStatus == "PASS" }
     val untestedCount = resolvers.count { it.udpStatus == "NOT_TESTED" && it.tcpStatus == "NOT_TESTED" }
+    val warningCount = resolvers.count { it.note?.contains("WARNING:", ignoreCase = true) == true }
     val filteredResolvers = resolvers.filter { resolver ->
         val networkType = resolver.source.takeIf { it.startsWith("current-network (") }
             ?.substringAfter("current-network (")?.substringBefore(";")
@@ -330,6 +331,7 @@ private fun HomeContent(
             "UDP" -> resolver.udpStatus == "PASS"
             "TCP" -> resolver.tcpStatus == "PASS"
             "UNTESTED" -> resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
+            "WARNINGS" -> resolver.note?.contains("WARNING:", ignoreCase = true) == true
             else -> true
         }
         sourceMatches && statusMatches
@@ -361,7 +363,8 @@ private fun HomeContent(
                 "Working" to healthyCount,
                 "UDP pass" to udpPassCount,
                 "TCP pass" to tcpPassCount,
-                "Untested" to untestedCount
+                "Untested" to untestedCount,
+                "Warnings" to warningCount
             ).forEach { (label, value) ->
                 Card(
                     modifier = Modifier.padding(bottom = 2.dp),
@@ -446,7 +449,7 @@ private fun HomeContent(
             Text("Export working DNS as TXT")
         }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested").forEach { (key, label) ->
+            listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested", "WARNINGS" to "Warnings").forEach { (key, label) ->
                 FilterChip(selected = selectedFilter == key, onClick = { selectedFilter = key }, label = { Text(label) })
             }
         }
