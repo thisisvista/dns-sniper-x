@@ -5,8 +5,14 @@ package com.thisisvista.dnssniperx.data
  * and response validation can be covered by local unit tests.
  */
 internal object DnsPacket {
-    fun buildQuery(name: String, transactionId: Int, includeEdns: Boolean = true): ByteArray {
+    fun buildQuery(
+        name: String,
+        transactionId: Int,
+        includeEdns: Boolean = true,
+        requestDnssec: Boolean = false
+    ): ByteArray {
         require(transactionId in 0..65_535) { "DNS transaction ID must be 16-bit" }
+        require(!requestDnssec || includeEdns) { "DNSSEC requests require EDNS" }
         val labels = name.trimEnd('.').split('.')
         require(labels.isNotEmpty() && labels.all { it.isNotEmpty() }) { "Invalid DNS name" }
         val encodedLabels = labels.map { label ->
@@ -37,7 +43,9 @@ internal object DnsPacket {
             buffer.put(0)
             buffer.putShort(41)
             buffer.putShort(1232)
-            buffer.putInt(0)
+            // EDNS flags: DO (DNSSEC OK) requests DNSSEC records; it does not
+            // mean the resolver validates DNSSEC signatures.
+            buffer.putInt(if (requestDnssec) 0x00008000 else 0)
             buffer.putShort(0)
         }
         return buffer.array()
