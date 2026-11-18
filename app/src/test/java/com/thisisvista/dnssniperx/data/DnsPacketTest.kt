@@ -15,8 +15,10 @@ class DnsPacketTest {
         assertEquals(1, query[5].toInt() and 0xff) // one question
         assertEquals("example.com", decodeQuestionName(query))
         val questionEnd = questionEndOffset(query)
-        assertEquals(1, query[questionEnd].toInt() and 0xff) // A
-        assertEquals(1, query[questionEnd + 2].toInt() and 0xff) // IN
+        assertEquals(0, query[questionEnd].toInt() and 0xff) // A, high byte
+        assertEquals(1, query[questionEnd + 1].toInt() and 0xff) // A, low byte
+        assertEquals(0, query[questionEnd + 2].toInt() and 0xff) // IN, high byte
+        assertEquals(1, query[questionEnd + 3].toInt() and 0xff) // IN, low byte
         assertEquals(1, query[11].toInt() and 0xff) // one additional OPT record
         assertEquals(41, ((query[questionEnd + 4].toInt() and 0xff) shl 8) or
             (query[questionEnd + 5].toInt() and 0xff)) // EDNS OPT type
@@ -96,7 +98,7 @@ class DnsPacketTest {
         val response = query.copyOf().apply {
             this[2] = 0x83.toByte()
             this[3] = 0x80.toByte()
-            this[7] = 1
+            this[7] = 0
         }
 
         val result = DnsPacket.validateResponse(query, response)
@@ -208,6 +210,7 @@ class DnsPacketTest {
             this[2] = 0x81.toByte()
             this[3] = 0x80.toByte()
             this[7] = 1 // one answer
+            this[11] = 0 // no additional records in this synthetic response
             addAll(listOf(0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
         }.toByteArray()
 
@@ -222,6 +225,7 @@ class DnsPacketTest {
             this[2] = 0x81.toByte()
             this[3] = 0x80.toByte()
             this[7] = 1 // one answer
+            this[11] = 0 // no additional records in this synthetic response
             addAll(listOf(0xc0, 0x0d, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
         }.toByteArray()
 
