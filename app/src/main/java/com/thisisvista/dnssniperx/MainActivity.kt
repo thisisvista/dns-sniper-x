@@ -222,15 +222,32 @@ private fun HomeContent(
 ) {
     var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
+    var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
+    var selectedProviderLabel by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
+    val networkTypes = resolvers.mapNotNull { resolver ->
+        resolver.source.takeIf { it.startsWith("current-network (") }
+            ?.substringAfter("current-network (")?.substringBefore(";")
+    }.distinct().sorted()
+    val providerLabels = resolvers.mapNotNull { resolver ->
+        resolver.source.takeIf { it.startsWith("current-network (") }
+            ?.substringAfter("user label: ")?.substringBefore(")")
+    }.distinct().sorted()
     val filteredResolvers = resolvers.filter { resolver ->
-        when (selectedFilter) {
+        val networkType = resolver.source.takeIf { it.startsWith("current-network (") }
+            ?.substringAfter("current-network (")?.substringBefore(";")
+        val providerLabel = resolver.source.takeIf { it.startsWith("current-network (") }
+            ?.substringAfter("user label: ")?.substringBefore(")")
+        val sourceMatches = (selectedNetworkType == "ALL" || networkType == selectedNetworkType) &&
+            (selectedProviderLabel == "ALL" || providerLabel == selectedProviderLabel)
+        val statusMatches = when (selectedFilter) {
             "WORKING" -> resolver.udpStatus == "PASS" || resolver.tcpStatus == "PASS"
             "UDP" -> resolver.udpStatus == "PASS"
             "TCP" -> resolver.tcpStatus == "PASS"
             "UNTESTED" -> resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
             else -> true
         }
+        sourceMatches && statusMatches
     }.let { list ->
         if (fastestFirst) list.sortedBy { item -> listOfNotNull(item.udpLatencyMs, item.tcpLatencyMs).minOrNull() ?: Long.MAX_VALUE } else list
     }
@@ -313,6 +330,22 @@ private fun HomeContent(
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested").forEach { (key, label) ->
                 FilterChip(selected = selectedFilter == key, onClick = { selectedFilter = key }, label = { Text(label) })
+            }
+        }
+        if (networkTypes.isNotEmpty()) {
+            Text("Filter by network type", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (listOf("ALL") + networkTypes).forEach { type ->
+                    FilterChip(selected = selectedNetworkType == type, onClick = { selectedNetworkType = type }, label = { Text(if (type == "ALL") "All networks" else type) })
+                }
+            }
+        }
+        if (providerLabels.isNotEmpty()) {
+            Text("Filter by provider label", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (listOf("ALL") + providerLabels).forEach { provider ->
+                    FilterChip(selected = selectedProviderLabel == provider, onClick = { selectedProviderLabel = provider }, label = { Text(if (provider == "ALL") "All providers" else provider) })
+                }
             }
         }
         FilterChip(selected = fastestFirst, onClick = { fastestFirst = !fastestFirst }, label = { Text(if (fastestFirst) "Fastest first" else "Best overall first") })
