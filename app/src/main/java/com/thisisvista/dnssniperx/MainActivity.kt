@@ -314,6 +314,10 @@ private fun HomeContent(
         resolver.source.takeIf { it.startsWith("current-network (") }
             ?.substringAfter("user label: ")?.substringBefore(")")
     }.distinct().sorted()
+    val healthyCount = resolvers.count { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
+    val udpPassCount = resolvers.count { it.udpStatus == "PASS" }
+    val tcpPassCount = resolvers.count { it.tcpStatus == "PASS" }
+    val untestedCount = resolvers.count { it.udpStatus == "NOT_TESTED" && it.tcpStatus == "NOT_TESTED" }
     val filteredResolvers = resolvers.filter { resolver ->
         val networkType = resolver.source.takeIf { it.startsWith("current-network (") }
             ?.substringAfter("current-network (")?.substringBefore(";")
@@ -344,6 +348,30 @@ private fun HomeContent(
                 Text("Local DNS library", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("$count DNS entries saved on this device.", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Text("Live overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            listOf(
+                "Saved" to count,
+                "Working" to healthyCount,
+                "UDP pass" to udpPassCount,
+                "TCP pass" to tcpPassCount,
+                "Untested" to untestedCount
+            ).forEach { (label, value) ->
+                Card(
+                    modifier = Modifier.padding(bottom = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
 
