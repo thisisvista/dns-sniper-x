@@ -14,8 +14,14 @@ class DnsPacketTest {
         assertEquals(0x01, query[2].toInt() and 0xff) // recursion desired
         assertEquals(1, query[5].toInt() and 0xff) // one question
         assertEquals("example.com", decodeQuestionName(query))
-        assertEquals(1, query[query.size - 3].toInt() and 0xff) // A
-        assertEquals(1, query[query.size - 1].toInt() and 0xff) // IN
+        val questionEnd = questionEndOffset(query)
+        assertEquals(1, query[questionEnd].toInt() and 0xff) // A
+        assertEquals(1, query[questionEnd + 2].toInt() and 0xff) // IN
+        assertEquals(1, query[11].toInt() and 0xff) // one additional OPT record
+        assertEquals(41, ((query[questionEnd + 4].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 5].toInt() and 0xff)) // EDNS OPT type
+        assertEquals(1232, ((query[questionEnd + 6].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 7].toInt() and 0xff)) // advertised UDP payload
     }
 
     @Test
@@ -107,5 +113,13 @@ class DnsPacketTest {
             offset += length
         }
         return labels.joinToString(".")
+    }
+
+    private fun questionEndOffset(packet: ByteArray): Int {
+        var offset = 12
+        while (packet[offset].toInt() != 0) {
+            offset += (packet[offset].toInt() and 0xff) + 1
+        }
+        return offset + 1
     }
 }
