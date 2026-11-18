@@ -50,6 +50,8 @@ import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
 import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -69,6 +71,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
     var isScanning by rememberSaveable { mutableStateOf(false) }
+    var scanProgress by rememberSaveable { mutableStateOf("") }
+    var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val txtFilePicker = rememberLauncherForActivityResult(
@@ -114,6 +118,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             message = message,
             isCollecting = isCollecting,
             isScanning = isScanning,
+            scanProgress = scanProgress,
             onCollectNetworkDns = { provider ->
                 scope.launch {
                     try {
@@ -170,43 +175,63 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 }
             },
             onScan = {
-                if (!isScanning && resolvers.isNotEmpty()) {
-                    scope.launch {
-                        isScanning = true
-                        message = "Testing up to 100 saved DNS entries over UDP and TCP…"
-                        try {
-                            val results = DnsProbe.scan(resolvers)
-                            results.forEach { result ->
-                                val best = listOfNotNull(result.udp.latencyMs, result.tcp.latencyMs).minOrNull()
-                                val overall = when {
-                                    result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
-                                    result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
-                                    else -> "FAILED"
+                if (isScanning) {
+                    scanJob?.cancel()
+                    message = "Pause requested. The current batch will stop; completed batches are already saved."
+                } else {
+                    val pending = resolvers.filter {
+                        it.udpStatus == "NOT_TESTED" && it.tcpStatus == "NOT_TESTED"
+                    }
+                    if (pending.isEmpty()) {
+                        message = "All saved DNS entries have already been scanned."
+                    } else {
+                        scanJob = scope.launch {
+                            isScanning = true
+                            var completed = 0
+                            scanProgress = "0 / ${pending.size}"
+                            try {
+                                pending.chunked(500).forEachIndexed { batchIndex, batch ->
+                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
+                                    val results = DnsProbe.scan(batch)
+                                    results.forEach { result ->
+                                        val best = listOfNotNull(result.udp.latencyMs, result.tcp.latencyMs).minOrNull()
+                                        val overall = when {
+                                            result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
+                                            result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
+                                            else -> "FAILED"
+                                        }
+                                        val notes = listOfNotNull(
+                                            result.udp.detail?.let { "UDP: $it" },
+                                            result.tcp.detail?.let { "TCP: $it" }
+                                        ).joinToString("; ").take(240).ifBlank { null }
+                                        dao.updateScanResult(
+                                            id = result.resolverId,
+                                            udpStatus = result.udp.status,
+                                            udpLatencyMs = result.udp.latencyMs,
+                                            tcpStatus = result.tcp.status,
+                                            tcpLatencyMs = result.tcp.latencyMs,
+                                            testedAt = System.currentTimeMillis(),
+                                            overallStatus = overall,
+                                            bestLatency = best,
+                                            note = notes
+                                        )
+                                    }
+                                    completed += results.size
+                                    scanProgress = "$completed / ${pending.size}"
                                 }
-                                val notes = listOfNotNull(
-                                    result.udp.detail?.let { "UDP: $it" },
-                                    result.tcp.detail?.let { "TCP: $it" }
-                                ).joinToString("; ").take(240).ifBlank { null }
-                                dao.updateScanResult(
-                                    id = result.resolverId,
-                                    udpStatus = result.udp.status,
-                                    udpLatencyMs = result.udp.latencyMs,
-                                    tcpStatus = result.tcp.status,
-                                    tcpLatencyMs = result.tcp.latencyMs,
-                                    testedAt = System.currentTimeMillis(),
-                                    overallStatus = overall,
-                                    bestLatency = best,
-                                    note = notes
-                                )
+                                val udpSummary = summarizeStatuses(pending.mapNotNull { item ->
+                                    resolvers.firstOrNull { it.id == item.id }?.udpStatus
+                                })
+                                message = "Scan complete: $completed DNS entries tested and saved. New entries can be scanned in the next run."
+                            } catch (cancelled: CancellationException) {
+                                message = "Scan paused. Completed batches were saved; press Resume to continue with remaining untested DNS entries."
+                                throw cancelled
+                            } catch (exception: Exception) {
+                                message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed batches remain saved; press Resume to continue."
+                            } finally {
+                                isScanning = false
+                                scanJob = null
                             }
-                            val udpSummary = summarizeStatuses(results.map { it.udp.status })
-                            val tcpSummary = summarizeStatuses(results.map { it.tcp.status })
-                            message = "Scan complete: ${results.size} DNS entries.\nUDP — $udpSummary\nTCP — $tcpSummary"
-                            if (resolvers.size > 100) message += "\nScan is limited to the first 100 entries per run."
-                        } catch (exception: Exception) {
-                            message = "Scan failed: ${exception.message ?: "Unknown error"}"
-                        } finally {
-                            isScanning = false
                         }
                     }
                 }
@@ -324,7 +349,7 @@ private fun HomeContent(
 
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "Sends a small standard DNS query to each saved address over UDP and TCP. Up to 100 entries are tested per run, with limited parallel connections.",
+            "Sends a standard DNS query over UDP and TCP. All untested entries are scanned automatically in batches of up to 500, with 8 simultaneous resolvers. Completed batches are saved so scanning can resume after interruption.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
