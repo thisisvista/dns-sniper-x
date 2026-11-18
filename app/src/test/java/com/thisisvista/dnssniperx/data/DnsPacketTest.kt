@@ -219,6 +219,29 @@ class DnsPacketTest {
     }
 
     @Test
+    fun acceptsCompressionPointerToEarlierPointerName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val firstAnswerOffset = questionEndOffset(query) + 4
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 2 // two answers
+            this[11] = 0 // no additional records
+            // First owner points to the question name at offset 12.
+            add(0xc0.toByte())
+            add(0x0c)
+            addAll(listOf(0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
+            // Second owner points to the first answer's compression pointer.
+            add(0xc0.toByte())
+            add(firstAnswerOffset.toByte())
+            addAll(listOf(0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 5, 6, 7, 8).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("PASS", result.status)
+    }
+
+    @Test
     fun rejectsCompressionPointerIntoLabelPayload() {
         // The byte at offset 13 is deliberately 3, which looks like a valid
         // label length but is actually the first byte inside the "name" label.
