@@ -182,6 +182,9 @@ internal object DnsPacket {
                     return NameInfo(labels.joinToString("."), nextOffset ?: (offset + 1))
                 }
                 (length and 0xc0) == 0xc0 -> {
+                    // A compressed name may itself be the target of a later
+                    // pointer, so record the pointer's starting boundary too.
+                    knownLabelOffsets += offset
                     require(offset + 1 < packet.size) { "Truncated DNS compression pointer" }
                     val pointer = ((length and 0x3f) shl 8) or (packet[offset + 1].toInt() and 0xff)
                     require(pointer >= 12 && pointer < offset) {
