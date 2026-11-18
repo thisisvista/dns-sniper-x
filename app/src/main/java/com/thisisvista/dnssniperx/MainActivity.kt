@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.LinkProperties
+import android.net.NetworkCapabilities
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -93,6 +94,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                         val network: Network? = connectivity.activeNetwork
                         val properties: LinkProperties? = network?.let { connectivity.getLinkProperties(it) }
+                        val capabilities: NetworkCapabilities? = network?.let { connectivity.getNetworkCapabilities(it) }
+                        val networkType = when {
+                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Mobile"
+                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"
+                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "Ethernet"
+                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
+                            else -> "Other or unknown"
+                        }
                         val addresses = properties?.dnsServers.orEmpty()
                             .map { it.hostAddress?.substringBefore('%') }
                             .filterNotNull()
@@ -100,9 +109,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         if (addresses.isEmpty()) {
                             message = "No DNS servers were exposed by the active network."
                         } else {
-                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network (user label: $provider)")
+                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network ($networkType; user label: $provider)")
                             val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
-                            message = "Detected ${addresses.size} DNS server(s); saved $inserted new entr(y/ies) with the user-selected label: $provider. ISP ownership is not verified."
+                            message = "Detected ${addresses.size} DNS server(s) on $networkType; saved $inserted new DNS entr(y/ies) with label: $provider. ISP ownership is not verified."
                         }
                     } catch (exception: Exception) {
                         message = "Could not read current network DNS: ${exception.message ?: "Unknown error"}"
