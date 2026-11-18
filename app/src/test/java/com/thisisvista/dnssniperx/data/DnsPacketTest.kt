@@ -14,8 +14,8 @@ class DnsPacketTest {
         assertEquals(0x01, query[2].toInt() and 0xff) // recursion desired
         assertEquals(1, query[5].toInt() and 0xff) // one question
         assertEquals("example.com", decodeQuestionName(query))
-        assertEquals(1, query[query.size - 4].toInt() and 0xff) // A
-        assertEquals(1, query[query.size - 2].toInt() and 0xff) // IN
+        assertEquals(1, query[query.size - 3].toInt() and 0xff) // A
+        assertEquals(1, query[query.size - 1].toInt() and 0xff) // IN
     }
 
     @Test
