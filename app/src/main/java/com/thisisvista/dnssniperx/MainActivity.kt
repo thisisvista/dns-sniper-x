@@ -1,6 +1,11 @@
 package com.thisisvista.dnssniperx
 
 import android.os.Bundle
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.LinkProperties
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -62,6 +67,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var isCollecting by rememberSaveable { mutableStateOf(false) }
     var isScanning by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -81,6 +87,28 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             message = message,
             isCollecting = isCollecting,
             isScanning = isScanning,
+            onCollectNetworkDns = {
+                scope.launch {
+                    try {
+                        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                        val network: Network? = connectivity.activeNetwork
+                        val properties: LinkProperties? = network?.let { connectivity.getLinkProperties(it) }
+                        val addresses = properties?.dnsServers.orEmpty()
+                            .map { it.hostAddress?.substringBefore('%') }
+                            .filterNotNull()
+                            .distinct()
+                        if (addresses.isEmpty()) {
+                            message = "No DNS servers were exposed by the active network."
+                        } else {
+                            val entries = ResolverListParser.parse(addresses.joinToString("\\n"), "current-network")
+                            val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
+                            message = "Detected ${addresses.size} DNS server(s) from the active network; saved $inserted new entr(y/ies). These are network-provided settings, not verified ISP ownership."
+                        }
+                    } catch (exception: Exception) {
+                        message = "Could not read current network DNS: ${exception.message ?: "Unknown error"}"
+                    }
+                }
+            },
             onCollect = {
                 if (!isCollecting) {
                     scope.launch {
@@ -179,6 +207,7 @@ private fun HomeContent(
     isCollecting: Boolean,
     isScanning: Boolean,
     onCollect: () -> Unit,
+    onCollectNetworkDns: () -> Unit,
     onScan: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
@@ -217,7 +246,7 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onCollectNetworkDns, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {\n            Text("Detect DNS from current network")\n        }\n        Text(\n            "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",\n            style = MaterialTheme.typography.bodySmall,\n            color = MaterialTheme.colorScheme.onSurfaceVariant\n        )\n        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
