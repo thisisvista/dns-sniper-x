@@ -20,10 +20,10 @@ class DnsPacketTest {
         assertEquals(0, query[questionEnd + 2].toInt() and 0xff) // IN, high byte
         assertEquals(1, query[questionEnd + 3].toInt() and 0xff) // IN, low byte
         assertEquals(1, query[11].toInt() and 0xff) // one additional OPT record
-        assertEquals(41, ((query[questionEnd + 4].toInt() and 0xff) shl 8) or
-            (query[questionEnd + 5].toInt() and 0xff)) // EDNS OPT type
-        assertEquals(1232, ((query[questionEnd + 6].toInt() and 0xff) shl 8) or
-            (query[questionEnd + 7].toInt() and 0xff)) // advertised UDP payload
+        assertEquals(41, ((query[questionEnd + 5].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 6].toInt() and 0xff)) // EDNS OPT type
+        assertEquals(1232, ((query[questionEnd + 7].toInt() and 0xff) shl 8) or
+            (query[questionEnd + 8].toInt() and 0xff)) // advertised UDP payload
     }
 
     @Test
