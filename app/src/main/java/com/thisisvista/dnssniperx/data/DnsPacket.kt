@@ -137,7 +137,8 @@ internal object DnsPacket {
         }
 
         var opt: PacketMetadata? = null
-        var hasRelevantAnswer = false
+        val cnameTargets = mutableMapOf<String, String>()
+        val addressOwners = mutableSetOf<String>()
         repeat(answers + authorities + additionals) { index ->
             val owner = readName(packet, offset, knownLabelOffsets)
             offset = owner.nextOffset
@@ -152,18 +153,23 @@ internal object DnsPacket {
                 when (type) {
                     1 -> {
                         require(dataLength == 4) { "Invalid A record length" }
-                        if (queryType == 1) hasRelevantAnswer = true
+                        if (queryType == 1) addressOwners += owner.value.lowercase()
                     }
                     28 -> {
                         require(dataLength == 16) { "Invalid AAAA record length" }
-                        if (queryType == 28) hasRelevantAnswer = true
+                        if (queryType == 28) addressOwners += owner.value.lowercase()
                     }
                     5 -> {
                         val cname = readName(packet, dataStart, knownLabelOffsets)
                         require(cname.nextOffset == dataStart + dataLength) {
                             "Invalid CNAME record data length"
                         }
-                        hasRelevantAnswer = true
+                        val ownerKey = owner.value.lowercase()
+                        val target = cname.value.lowercase()
+                        val previous = cnameTargets.put(ownerKey, target)
+                        require(previous == null || previous == target) {
+                            "Conflicting CNAME targets for the same owner"
+                        }
                     }
                 }
             }
@@ -204,6 +210,17 @@ internal object DnsPacket {
             offset = dataStart + dataLength
         }
         require(offset == packet.size) { "Unexpected trailing bytes in DNS response" }
+
+        // Follow only the CNAME chain rooted at the question name. Address
+        // records for unrelated owners must not make this response a PASS.
+        val reachableOwners = mutableSetOf(queryName.lowercase())
+        var currentOwner = queryName.lowercase()
+        repeat(cnameTargets.size) {
+            val target = cnameTargets[currentOwner] ?: return@repeat
+            if (!reachableOwners.add(target)) return@repeat
+            currentOwner = target
+        }
+        val hasRelevantAnswer = reachableOwners.any { it in cnameTargets || it in addressOwners }
         return opt?.copy(hasRelevantAnswer = hasRelevantAnswer)
             ?: PacketMetadata(0, "EDNS not advertised by server", hasRelevantAnswer)
     }

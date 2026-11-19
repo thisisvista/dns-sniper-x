@@ -504,6 +504,44 @@ class DnsPacketTest {
     }
 
     @Test
+    fun acceptsAddressAnswerAtCnameTarget() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 2
+            this[11] = 0
+            // example.com CNAME alias.example.net.
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 19).map { it.toByte() })
+            addAll(listOf(5, 'a'.code, 'l'.code, 'i'.code, 'a'.code, 's'.code,
+                7, 'e'.code, 'x'.code, 'a'.code, 'm'.code, 'p'.code, 'l'.code, 'e'.code,
+                3, 'n'.code, 'e'.code, 't'.code, 0).map { it.toByte() })
+            // The A record belongs to the CNAME target.
+            addAll(listOf(0xc0, 0x2d, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 8, 8, 8, 8).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("PASS", result.status)
+    }
+
+    @Test
+    fun rejectsConflictingCnameTargetsForSameOwner() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 2
+            this[11] = 0
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 2, 0xc0, 0x0c).map { it.toByte() })
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 2, 0xc0, 0x0c).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
     fun ignoresCnameAnswerForUnrelatedOwnerName() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
