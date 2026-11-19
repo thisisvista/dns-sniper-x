@@ -60,7 +60,7 @@ internal object DnsPacket {
     }
 
     data class ResponseInfo(val status: String, val detail: String, val responseCode: Int)
-    private data class EdnsInfo(val extendedRcode: Int, val description: String)
+    private data class PacketMetadata(val extendedRcode: Int, val description: String, val hasRelevantAnswer: Boolean)
 
     fun validateResponse(query: ByteArray, response: ByteArray): ResponseInfo {
         require(query.size >= 12 && response.size >= 12) { "DNS packet is too short" }
@@ -101,8 +101,8 @@ internal object DnsPacket {
             )
         }
 
-        val edns = inspectAdditionalRecords(response)
-        val responseCode = (edns.extendedRcode shl 4) or (flags and 0x000f)
+        val metadata = inspectAdditionalRecords(response, queryType)
+        val responseCode = (metadata.extendedRcode shl 4) or (flags and 0x000f)
         val responseCodeName = when (responseCode) {
             0 -> "NOERROR"
             1 -> "FORMERR"
@@ -113,16 +113,16 @@ internal object DnsPacket {
             16 -> "BADVERS"
             else -> "RCODE_${responseCode}"
         }
-        val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${edns.description}"
+        val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${metadata.description}"
         return when {
             responseCode != 0 -> ResponseInfo("DNS_ERROR", detail, responseCode)
-            answerCount == 0 -> ResponseInfo("NO_ANSWER", "${detail}; valid response without an answer", responseCode)
+            answerCount == 0 || !metadata.hasRelevantAnswer -> ResponseInfo("NO_ANSWER", "${detail}; no answer matching the requested type or CNAME", responseCode)
             else -> ResponseInfo("PASS", detail, responseCode)
         }
     }
 
     /** Inspects OPT records in the Additional section; absence is informational, not a DNS failure. */
-    private fun inspectAdditionalRecords(packet: ByteArray): EdnsInfo {
+    private fun inspectAdditionalRecords(packet: ByteArray, queryType: Int): PacketMetadata {
         var offset = 12
         val questions = unsignedShort(packet, 4)
         val answers = unsignedShort(packet, 6)
@@ -136,7 +136,8 @@ internal object DnsPacket {
             offset += 4
         }
 
-        var opt: EdnsInfo? = null
+        var opt: PacketMetadata? = null
+        var hasRelevantAnswer = false
         repeat(answers + authorities + additionals) { index ->
             val owner = readName(packet, offset, knownLabelOffsets)
             offset = owner.nextOffset
@@ -145,6 +146,10 @@ internal object DnsPacket {
             val recordClass = unsignedShort(packet, offset + 2)
             val ttl = unsignedInt(packet, offset + 4)
             val dataLength = unsignedShort(packet, offset + 8)
+            if (index < answers && recordClass == 1 && (type == queryType || type == 5)) {
+                // A matching IN record or CNAME is a meaningful answer to the question.
+                hasRelevantAnswer = true
+            }
             val dataStart = offset + 10
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
 
@@ -179,12 +184,13 @@ internal object DnsPacket {
                 } else {
                     "EDNS OPT present with unsupported version ${version}"
                 }
-                opt = EdnsInfo(extendedRcode, description)
+                opt = PacketMetadata(extendedRcode, description, hasRelevantAnswer)
             }
             offset = dataStart + dataLength
         }
         require(offset == packet.size) { "Unexpected trailing bytes in DNS response" }
-        return opt ?: EdnsInfo(0, "EDNS not advertised by server")
+        return opt?.copy(hasRelevantAnswer = hasRelevantAnswer)
+            ?: PacketMetadata(0, "EDNS not advertised by server", hasRelevantAnswer)
     }
 
     /**

@@ -134,6 +134,42 @@ class DnsPacketTest {
         assertEquals("NO_ANSWER", result.status)
     }
 
+
+    @Test
+    fun rejectsUnrelatedAnswerTypeForAddressQuery() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            this[11] = 0 // no additional records
+            // A TXT answer is not a meaningful answer to an A query.
+            addAll(listOf(0xc0, 0x0c, 0, 16, 0, 1, 0, 0, 0, 0, 0, 1, 'x'.code).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("NO_ANSWER", result.status)
+    }
+
+    @Test
+    fun acceptsCnameAsAnswerToAddressQuery() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1 // one answer
+            this[11] = 0 // no additional records
+            // CNAME answer for example.com pointing to alias.example.net.
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 19).map { it.toByte() })
+            addAll(listOf(5, 'a'.code, 'l'.code, 'i'.code, 'a'.code, 's'.code,
+                7, 'e'.code, 'x'.code, 'a'.code, 'm'.code, 'p'.code, 'l'.code, 'e'.code,
+                3, 'n'.code, 'e'.code, 't'.code, 0).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("PASS", result.status)
+    }
+
     @Test
     fun identifiesTruncatedUdpResponse() {
         val query = DnsPacket.buildQuery("example.com", 42)
