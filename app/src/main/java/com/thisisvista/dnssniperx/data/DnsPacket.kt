@@ -220,7 +220,14 @@ internal object DnsPacket {
             require(reachableOwners.add(target)) { "CNAME loop detected" }
             currentOwner = target
         }
-        val hasRelevantAnswer = reachableOwners.any { it in cnameTargets || it in addressOwners }
+        val hasRelevantAnswer = when (queryType) {
+            // For address lookups, a CNAME is only an intermediate step. The
+            // chain is complete only when its reachable target has the requested address record.
+            1, 28 -> reachableOwners.any { it in addressOwners }
+            // A CNAME lookup is answered by the alias record itself.
+            5 -> queryName.lowercase() in cnameTargets
+            else -> reachableOwners.any { it in cnameTargets || it in addressOwners }
+        }
         return opt?.copy(hasRelevantAnswer = hasRelevantAnswer)
             ?: PacketMetadata(0, "EDNS not advertised by server", hasRelevantAnswer)
     }
