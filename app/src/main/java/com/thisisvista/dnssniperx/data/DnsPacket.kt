@@ -205,7 +205,7 @@ internal object DnsPacket {
                 } else {
                     "EDNS OPT present with unsupported version ${version}"
                 }
-                opt = PacketMetadata(extendedRcode, description, hasRelevantAnswer)
+                opt = PacketMetadata(extendedRcode, description, false)
             }
             offset = dataStart + dataLength
         }

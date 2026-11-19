@@ -517,7 +517,7 @@ class DnsPacketTest {
                 7, 'e'.code, 'x'.code, 'a'.code, 'm'.code, 'p'.code, 'l'.code, 'e'.code,
                 3, 'n'.code, 'e'.code, 't'.code, 0).map { it.toByte() })
             // The A record belongs to the CNAME target.
-            addAll(listOf(0xc0, 0x2d, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 8, 8, 8, 8).map { it.toByte() })
+            addAll(listOf(0xc0, 0x29, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 8, 8, 8, 8).map { it.toByte() })
         }.toByteArray()
 
         val result = DnsPacket.validateResponse(query, response)
@@ -533,7 +533,8 @@ class DnsPacketTest {
             this[7] = 2
             this[11] = 0
             addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 2, 0xc0, 0x0c).map { it.toByte() })
-            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 2, 0xc0, 0x0c).map { it.toByte() })
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 11,
+                5, 'o'.code, 't'.code, 'h'.code, 'e'.code, 'r'.code, 3, 'c'.code, 'o'.code, 'm'.code, 0).map { it.toByte() })
         }.toByteArray()
 
         assertThrows(IllegalArgumentException::class.java) {
