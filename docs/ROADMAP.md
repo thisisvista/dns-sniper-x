@@ -35,7 +35,7 @@
 - [x] Add protocol-specific tunnel profile metadata validation (no secret persistence).
 - [x] Add a pure tunnel lifecycle state machine with transition tests.
 - [x] Add an Android Keystore-backed AES-GCM secret vault foundation (not yet connected to profiles or UI).
-- [ ] Pass emulator instrumentation coverage for vault encryption/decryption, AAD binding, tamper rejection, deletion, and lost-key behavior.
+- [x] Pass emulator instrumentation coverage for vault encryption/decryption, AAD binding, tamper rejection, deletion, and lost-key behavior.
 - [ ] Verify Keystore behavior across supported physical Android devices and API levels.
 - [ ] Integrate secret provisioning with protocol-specific configuration.
 - [ ] Implement and audit native DNSTT/Slipstream client adapters.
@@ -51,6 +51,6 @@
 
 ## Stage 6 — Release readiness
 - [x] Automated unit tests and debug APK CI artifact.
-- [ ] Instrumentation and real-device tests.
+- [ ] Complete physical-device/API-level and Wi-Fi/mobile network tests (Keystore vault instrumentation is covered by CI).
 - [ ] Privacy/network-use disclosures.
 - [ ] Signed release build and release notes.
