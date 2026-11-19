@@ -163,7 +163,7 @@ object DnsProbe {
             appendDiagnostic(base, diagnostic)
         } catch (exception: Exception) {
             val diagnostic = "NXDOMAIN check unavailable: ${exception.message?.take(80) ?: "network error"}"
-            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
+            appendDiagnostic(base, diagnostic)
         }
     }
 
