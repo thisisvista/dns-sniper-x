@@ -1,47 +1,65 @@
 # DNS SniperX
 
-An independent Android app for collecting, storing, testing and exporting DNS resolver candidates.
+An independent Android app for discovering, storing, testing, and exporting DNS resolver candidates.
 
-## Current status
+## Current implementation
 
-- Android project foundation builds in GitHub Actions.
-- Local Room database and manual DNS list import are implemented.
-- Public-list collection downloads candidate endpoints from Public DNS Info and Trickest Resolvers over HTTPS.
-- DNS probes send a standard `example.com A` query over UDP and TCP, validate the DNS response header and transaction ID, measure response time, and store separate transport results.
-- Scanning is limited to 100 saved entries per run and 8 concurrent resolvers with short timeouts.
-- Debug APK is uploaded as a GitHub Actions artifact after a successful build.
-- Current-network DNS detection can save a user-selected provider label (Irancell, MCI, Rightel, TCI, Shatel, Asiatech, Sabanet, Pars Online, or Other). The label is explicitly user-provided and is not proof of IP ownership.
-- **DNS reachability is not DNSTT/Slipstream compatibility.** Tunnel end-to-end checks and SlipNet export are not implemented yet.
+- Android app with a local Room database for saved resolver entries.
+- Public resolver collection over HTTPS from the sources listed below, including a regional Iran list.
+- Manual paste and TXT-file import. Large TXT files are read in chunks of up to 500 lines; the user selects the file only once.
+- DNS scanning over UDP and TCP, with up to 8 concurrent resolvers and batches of up to 500 entries.
+- Scan progress, pause/resume, immediate persistence of completed results, and retry for unsuccessful or warning results.
+- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental display of saved entries.
+- NXDOMAIN and EDNS diagnostics are warnings/diagnostics, not proof of malicious interception or tunnel compatibility.
+- Export of entries with at least one successful transport, sorted by the fastest successful UDP/TCP latency. Non-default ports are retained; IPv6 endpoints are bracketed when a port is included.
+- Debug APK is built and uploaded as a GitHub Actions artifact after successful CI.
 
 ## Public collection sources
 
 - Public DNS Info: https://public-dns.info/nameservers.csv
-- Trickest Resolvers: https://github.com/trickest/resolvers
+- Trickest Resolvers: https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt
+- Public DNS Directory — Iran: https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt
+- Public DNS Directory — global: https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt
 
-These are candidate lists only. Their contents may include stale or unreachable addresses. DNS SniperX must test candidates on the user's current network before ranking them as usable.
+These sources provide candidates only. Entries may be stale, duplicated, or unreachable. DNS SniperX tests candidates on the phone's active network before treating them as working.
 
-## Scanner result meanings
+## Scanner behavior and result meanings
 
-- `PASS`: a matching DNS response was received over the selected transport.
+- The current probe sends a standard DNS query for `example.com A` over UDP and TCP.
+- UDP and TCP outcomes are recorded separately, including latency and last-tested time.
+- Scanning runs automatically in batches of up to 500 entries, with 8 concurrent resolvers. Completed results are saved as the scan progresses.
+- `PASS`: a valid DNS response was received.
+- `DNS_ERROR`: the resolver returned a DNS error response.
+- `NO_ANSWER`: a valid response contained no answer.
+- `TRUNCATED`: the UDP response was marked truncated.
 - `TIMEOUT`: no response arrived before the timeout.
-- `FAIL`: connection or response validation failed.
-- UDP and TCP outcomes are stored separately.
+- `FAIL`: a network or protocol error occurred.
 
-The scanner tests the network currently used by Android. A passing DNS query does not prove that a tunnel can be established.
+A DNS `PASS` confirms DNS response behavior only. It does not prove that a blocked website is reachable or that DNSTT, Slipstream, or another tunnel can connect.
 
-## Network provider labels
+## Network DNS labels
 
-When collecting DNS settings from the active Android network, the user may optionally choose a provider label. This records the user's own description of the current connection; it does not identify the ISP from the IP address, validate ownership, or independently detect the carrier. Use `Unspecified` when unsure.
+The app can read DNS servers exposed by Android for the active network. The user may optionally attach a provider label such as Irancell, MCI, Rightel, TCI, Shatel, Asiatech, Sabanet, or Pars Online. This is a user-selected label, not automatic ISP detection or proof of IP ownership. On a VPN connection, Android may expose the VPN interface's DNS servers.
 
-## Import format
+## Import and export formats
 
-Paste one endpoint per line in the app:
+The parser accepts one endpoint per line, including:
 
 - `1.1.1.1`
 - `8.8.8.8:5353`
 - `resolver.example`
 - `[2001:db8::1]:53`
+- An unbracketed IPv6 address without an explicit port, such as `2001:4860:4860::8888`
 
-Port 53 is assumed when omitted. Syntax validation does not test connectivity.
+Port 53 is assumed when omitted. CSV-like sources with an address in the first column are also supported. Import performs syntax validation only; it does not test connectivity.
+
+The TXT export currently provides resolver endpoints (IP or IP:port, with bracketed IPv6 when needed). **Compatibility with SlipNet's exact import parser has not yet been verified.**
+
+## Not implemented yet
+
+- DoH scanning.
+- CIDR-range expansion and large-scale resolver discovery.
+- Full DNSTT and Slipstream end-to-end tunnel verification.
+- Verified ISP ownership classification.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
