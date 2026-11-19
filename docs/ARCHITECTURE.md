@@ -26,7 +26,7 @@ Downloads use bounded connect/read timeouts and per-source character and line li
 
 ## Resolver identity and provenance
 
-A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The resolver rows retain source IDs when duplicate endpoints are merged. A separate local collection history stores each source ID, display name, exact configured URL, retrieval timestamp, candidate count, and any fetch error. Terms/license notes are nullable and currently shown as "not documented"; the app does not infer or claim a license. The history retains the latest 100 attempts and the UI displays the latest 20.
+A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The resolver rows retain source IDs when duplicate endpoints are merged. A separate local collection history stores each source ID, display name, exact configured URL, retrieval timestamp, candidate count, and any fetch error. Terms/license notes are nullable and currently shown as "not documented"; the app does not infer or claim a license. The database prunes older attempts and retains only the latest 100; the UI displays the latest 20.
 
 ## DNS probe behaviour
 

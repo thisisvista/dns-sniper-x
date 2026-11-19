@@ -258,7 +258,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         message = "Downloading public resolver lists…"
                         try {
                             val (summary, entries) = ResolverCollector.downloadAndParse()
-                            dao.insertSourceCollectionHistory(summary.results.map { result ->
+                            dao.saveSourceCollectionHistory(summary.results.map { result ->
                                 SourceCollectionHistoryEntity(
                                     sourceId = result.sourceId,
                                     sourceName = result.source,

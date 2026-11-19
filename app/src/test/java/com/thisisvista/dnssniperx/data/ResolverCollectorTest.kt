@@ -8,6 +8,36 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ResolverCollectorTest {
+    @Test fun sourceFetchResultCarriesStableSourceProvenance() {
+        val retrievedAt = 1_800_000_000_000L
+        val result = SourceFetchResult(
+            source = "Iran public DNS directory",
+            found = 42,
+            inserted = 0,
+            sourceId = "iran-public-dns-directory",
+            sourceUrl = "https://raw.githubusercontent.com/example/iran.txt",
+            retrievedAt = retrievedAt
+        )
+        assertEquals("iran-public-dns-directory", result.sourceId)
+        assertEquals("https://raw.githubusercontent.com/example/iran.txt", result.sourceUrl)
+        assertEquals(retrievedAt, result.retrievedAt)
+        assertEquals(42, result.found)
+    }
+
+    @Test fun failedSourceFetchStillCarriesItsConfiguredUrl() {
+        val result = SourceFetchResult(
+            source = "Public DNS Info",
+            found = 0,
+            inserted = 0,
+            error = "timeout",
+            sourceId = "public-dns-info",
+            sourceUrl = "https://public-dns.info/nameservers.csv"
+        )
+        assertEquals("public-dns-info", result.sourceId)
+        assertEquals("https://public-dns.info/nameservers.csv", result.sourceUrl)
+        assertEquals("timeout", result.error)
+    }
+
     @Test fun includesRegionalIranAndGlobalPublicDirectories() {
         val sources = ResolverCollector.sources.associateBy { it.id }
         assertTrue(sources.containsKey("iran-public-dns-directory"))

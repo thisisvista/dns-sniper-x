@@ -45,7 +45,16 @@ interface ResolverDao {
     fun observeRecentSourceCollectionHistory(): Flow<List<SourceCollectionHistoryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertSourceCollectionHistory(entries: List<SourceCollectionHistoryEntity>)
+    suspend fun insertSourceCollectionHistoryRows(entries: List<SourceCollectionHistoryEntity>)
+
+    @Query("DELETE FROM source_collection_history WHERE id NOT IN (SELECT id FROM source_collection_history ORDER BY retrievedAt DESC, id DESC LIMIT 100)")
+    suspend fun pruneSourceCollectionHistory()
+
+    @Transaction
+    suspend fun saveSourceCollectionHistory(entries: List<SourceCollectionHistoryEntity>) {
+        if (entries.isNotEmpty()) insertSourceCollectionHistoryRows(entries)
+        pruneSourceCollectionHistory()
+    }
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(entry: ScanHistoryEntity)
