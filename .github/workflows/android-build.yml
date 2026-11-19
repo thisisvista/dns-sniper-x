@@ -9,7 +9,9 @@ on:
 
 jobs:
   assemble:
-    runs-on: ubuntu-latest
+    # Pin a stable hosted image; ubuntu-latest moved to Ubuntu 26.04 and
+    # the Android 35 emulator failed to finish booting on that image.
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -39,6 +41,10 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
+          emulator-boot-timeout: 900
+          disable-animations: true
           script: gradle connectedDebugAndroidTest
 
       - name: Build debug APK
