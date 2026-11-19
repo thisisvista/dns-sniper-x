@@ -146,12 +146,24 @@ internal object DnsPacket {
             val recordClass = unsignedShort(packet, offset + 2)
             val ttl = unsignedInt(packet, offset + 4)
             val dataLength = unsignedShort(packet, offset + 8)
-            if (index < answers && recordClass == 1 && (type == queryType || type == 5)) {
-                // A matching IN record or CNAME is a meaningful answer to the question.
-                hasRelevantAnswer = true
-            }
             val dataStart = offset + 10
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
+            if (index < answers && recordClass == 1) {
+                when (type) {
+                    queryType -> {
+                        if (type == 1) require(dataLength == 4) { "Invalid A record length" }
+                        if (type == 28) require(dataLength == 16) { "Invalid AAAA record length" }
+                        hasRelevantAnswer = true
+                    }
+                    5 -> {
+                        val cname = readName(packet, dataStart, knownLabelOffsets)
+                        require(cname.nextOffset == dataStart + dataLength) {
+                            "Invalid CNAME record data length"
+                        }
+                        hasRelevantAnswer = true
+                    }
+                }
+            }
 
             if (type == 41) {
                 require(index >= answers + authorities) {

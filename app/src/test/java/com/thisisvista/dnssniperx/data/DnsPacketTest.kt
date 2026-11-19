@@ -485,6 +485,38 @@ class DnsPacketTest {
         }
     }
 
+    @Test
+    fun rejectsARecordWithInvalidAddressLength() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+            this[11] = 0
+            addAll(listOf(0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 3, 1, 2, 3).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
+    fun rejectsCnameWithMalformedTargetName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+            this[11] = 0
+            addAll(listOf(0xc0, 0x0c, 0, 5, 0, 1, 0, 0, 0, 0, 0, 2, 0xc0, 0xff).map { it.toByte() })
+        }.toByteArray()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
     private fun decodeQuestionName(packet: ByteArray): String {
         val labels = mutableListOf<String>()
         var offset = 12
