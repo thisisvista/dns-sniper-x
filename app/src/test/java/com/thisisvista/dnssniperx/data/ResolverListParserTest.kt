@@ -75,7 +75,7 @@ class ResolverListParserTest {
 
     @Test fun acceptsFullyQualifiedHostnamesWithTrailingDot() {
         val result = ResolverListParser.parse(
-            "resolver.example.\\ndns.google.,53,US"
+            "resolver.example.\ndns.google.,53,US"
         )
         assertEquals(2, result.size)
         assertEquals("resolver.example.", result[0].address)
