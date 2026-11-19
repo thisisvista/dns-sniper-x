@@ -71,6 +71,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
+    var isImporting by rememberSaveable { mutableStateOf(false) }
+    var importProgress by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
     var scanProgress by rememberSaveable { mutableStateOf("") }
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
@@ -96,19 +98,23 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     ) { uri ->
         if (uri != null) {
             scope.launch {
+                isImporting = true
+                var validCount = 0
+                var inserted = 0
+                var processedLines = 0
                 try {
                     val reader = context.contentResolver.openInputStream(uri)
                         ?.bufferedReader()
                         ?: error("Could not open the selected file.")
-                    var validCount = 0
-                    var inserted = 0
                     reader.use { input ->
                         input.lineSequence().chunked(500).forEach { lines ->
+                            processedLines += lines.size
                             val parsed = ResolverListParser.parse(lines.joinToString("\n"), source = "txt-import")
                             validCount += parsed.size
                             if (parsed.isNotEmpty()) {
                                 inserted += dao.insertIgnore(parsed).count { it != -1L }
                             }
+                            importProgress = "Processed $processedLines lines; saved $inserted new DNS entries…"
                         }
                     }
                     val skipped = validCount - inserted
@@ -118,8 +124,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         skipped > 0 -> "Imported $inserted new DNS entries from TXT; skipped $skipped duplicates."
                         else -> "Imported $inserted DNS entries from TXT successfully."
                     }
+                } catch (cancelled: CancellationException) {
+                    message = "TXT import cancelled. Entries saved from completed batches remain in your library."
+                    throw cancelled
                 } catch (exception: Exception) {
-                    message = "TXT import failed: ${exception.message ?: "Could not read file"}"
+                    message = "TXT import failed: ${exception.message ?: "Could not read file"}. Entries saved from completed batches remain in your library."
+                } finally {
+                    isImporting = false
+                    importProgress = ""
                 }
             }
         }
@@ -142,6 +154,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             onImportTextChange = { importText = it },
             message = message,
             isCollecting = isCollecting,
+            isImporting = isImporting,
+            importProgress = importProgress,
             isScanning = isScanning,
             scanProgress = scanProgress,
             onCollectNetworkDns = { provider ->
@@ -174,7 +188,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 }
             },
             onCollect = {
-                if (!isCollecting) {
+                if (!isCollecting && !isImporting) {
                     scope.launch {
                         isCollecting = true
                         message = "Downloading public resolver lists…"
@@ -300,6 +314,8 @@ private fun HomeContent(
     onImportTextChange: (String) -> Unit,
     message: String,
     isCollecting: Boolean,
+    isImporting: Boolean,
+    importProgress: String,
     isScanning: Boolean,
     scanProgress: String,
     onCollect: () -> Unit,
@@ -407,7 +423,7 @@ private fun HomeContent(
                 FilterChip(selected = selectedProvider == provider, onClick = { selectedProvider = provider }, label = { Text(provider) })
             }
         }
-        Button(onClick = { onCollectNetworkDns(selectedProvider) }, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = { onCollectNetworkDns(selectedProvider) }, enabled = !isCollecting && !isImporting && !isScanning, modifier = Modifier.fillMaxWidth()) {
             Text("Detect and save current network DNS")
         }
         Text(
@@ -415,7 +431,7 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollect, enabled = !isCollecting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onCollect, enabled = !isCollecting && !isImporting && !isScanning, modifier = Modifier.fillMaxWidth()) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
@@ -433,7 +449,7 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onScan, enabled = count > 0 && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onScan, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             if (isScanning) Text("Pause scan") else Text("Scan / Resume untested DNS (UDP + TCP)")
         }
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
@@ -445,18 +461,22 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onImportFile, enabled = !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onImportFile, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Choose TXT file")
+        }
+        if (isImporting && importProgress.isNotBlank()) {
+            Text(importProgress, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
         OutlinedTextField(
             value = importText,
             onValueChange = onImportTextChange,
+            enabled = !isImporting,
             modifier = Modifier.fillMaxWidth(),
             minLines = 4,
             label = { Text("DNS addresses") },
             placeholder = { Text("1.1.1.1\n8.8.8.8:53\n[2001:db8::1]:53") }
         )
-        Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Import to local library")
         }
 
@@ -469,7 +489,7 @@ private fun HomeContent(
             label = { Text("Search DNS address, port, or source") },
             placeholder = { Text("Example: 1.2.3.4 or iran-public") }
         )
-        Button(onClick = onExportHealthy, enabled = !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Export working DNS as TXT")
         }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
