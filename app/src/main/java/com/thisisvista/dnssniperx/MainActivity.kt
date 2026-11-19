@@ -572,12 +572,12 @@ private fun HomeContent(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(formatResolverEndpoint(resolver.address, resolver.port), fontWeight = FontWeight.SemiBold)
                         Text(
-                            "UDP: ${friendlyProbeStatus(resolver.udpStatus)}${resolver.udpLatencyMs?.let { " • ${it} ms" } ?: ""}",
+                            "UDP: ${friendlyProbeStatus(resolver.udpStatus)}${resolver.udpLatencyMs.takeIf { resolver.udpStatus == "PASS" }?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "TCP: ${friendlyProbeStatus(resolver.tcpStatus)}${resolver.tcpLatencyMs?.let { " • ${it} ms" } ?: ""}",
+                            "TCP: ${friendlyProbeStatus(resolver.tcpStatus)}${resolver.tcpLatencyMs.takeIf { resolver.tcpStatus == "PASS" }?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
