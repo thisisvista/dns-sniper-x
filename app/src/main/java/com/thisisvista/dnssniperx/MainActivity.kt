@@ -387,7 +387,12 @@ private fun HomeContent(
         }
         sourceMatches && statusMatches && searchMatches
     }.let { list ->
-        if (fastestFirst) list.sortedBy { item -> listOfNotNull(item.udpLatencyMs, item.tcpLatencyMs).minOrNull() ?: Long.MAX_VALUE } else list
+        if (fastestFirst) list.sortedBy { item ->
+            listOfNotNull(
+                item.udpLatencyMs.takeIf { item.udpStatus == "PASS" },
+                item.tcpLatencyMs.takeIf { item.tcpStatus == "PASS" }
+            ).minOrNull() ?: Long.MAX_VALUE
+        } else list
     }
     Column(
         modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
