@@ -95,6 +95,38 @@ class AndroidKeystoreTunnelSecretStoreTest {
         }
     }
 
+
+    @Test
+    fun deletingOneProfilePreservesOtherProfilesAndEmptySecretsAreRejected() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = AndroidKeystoreTunnelSecretStore(context)
+        val suffix = UUID.randomUUID().toString()
+        val firstProfile = "profile-a-$suffix"
+        val secondProfile = "profile-b-$suffix"
+        val secretName = "credential"
+        val firstSecret = "first-profile-secret".toByteArray(Charsets.UTF_8)
+        val secondSecret = "second-profile-secret".toByteArray(Charsets.UTF_8)
+
+        try {
+            assertThrows(IllegalArgumentException::class.java) {
+                store.put(firstProfile, secretName, ByteArray(0))
+            }
+
+            store.put(firstProfile, secretName, firstSecret)
+            store.put(secondProfile, secretName, secondSecret)
+
+            store.deleteProfile(firstProfile)
+
+            assertNull(store.get(firstProfile, secretName))
+            assertArrayEquals(secondSecret, store.get(secondProfile, secretName))
+        } finally {
+            store.deleteProfile(firstProfile)
+            store.deleteProfile(secondProfile)
+            firstSecret.fill(0)
+            secondSecret.fill(0)
+        }
+    }
+
     private fun encodeIdentifier(value: String): String =
         Base64.encodeToString(
             value.toByteArray(Charsets.UTF_8),
