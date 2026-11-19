@@ -213,16 +213,27 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     }
                 }
             },
-            onScan = {
+            onScan = { retryUnsuccessful ->
                 if (isScanning) {
                     scanJob?.cancel()
                     message = "Pause requested. The current batch will stop; completed batches are already saved."
                 } else {
-                    val pending = resolvers.filter {
-                        it.udpStatus == "NOT_TESTED" && it.tcpStatus == "NOT_TESTED"
+                    val pending = resolvers.filter { resolver ->
+                        if (!retryUnsuccessful) {
+                            resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
+                        } else {
+                            val alreadyTested = resolver.udpStatus != "NOT_TESTED" || resolver.tcpStatus != "NOT_TESTED"
+                            val needsRetry = resolver.udpStatus != "PASS" || resolver.tcpStatus != "PASS" ||
+                                resolver.note?.contains("WARNING:", ignoreCase = true) == true
+                            alreadyTested && needsRetry
+                        }
                     }
                     if (pending.isEmpty()) {
-                        message = "All saved DNS entries have already been scanned."
+                        message = if (retryUnsuccessful) {
+                            "No previously tested DNS entries need a retry."
+                        } else {
+                            "No untested DNS entries remain. Use Retry unsuccessful / warnings to test them again."
+                        }
                     } else {
                         scanJob = scope.launch {
                             isScanning = true
@@ -257,12 +268,12 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                         scanProgress = "$completed / ${pending.size}"
                                     }
                                 }
-                                message = "Scan complete: $completed DNS entries tested and saved. New entries can be scanned in the next run."
+                                message = "Scan complete: $completed DNS entries tested and saved."
                             } catch (cancelled: CancellationException) {
-                                message = "Scan paused. Completed batches were saved; press Resume to continue with remaining untested DNS entries."
+                                message = "Scan paused. Completed batches were saved; press Resume to continue."
                                 throw cancelled
                             } catch (exception: Exception) {
-                                message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed batches remain saved; press Resume to continue."
+                                message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry."
                             } finally {
                                 isScanning = false
                                 scanJob = null
@@ -320,7 +331,7 @@ private fun HomeContent(
     scanProgress: String,
     onCollect: () -> Unit,
     onCollectNetworkDns: (String) -> Unit,
-    onScan: () -> Unit,
+    onScan: (retryUnsuccessful: Boolean) -> Unit,
     onImportFile: () -> Unit,
     onExportHealthy: () -> Unit,
     onImport: () -> Unit,
@@ -449,8 +460,15 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onScan, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = { onScan(false) }, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             if (isScanning) Text("Pause scan") else Text("Scan / Resume untested DNS (UDP + TCP)")
+        }
+        Button(
+            onClick = { onScan(true) },
+            enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Retry unsuccessful / warnings")
         }
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
