@@ -33,12 +33,29 @@ class AndroidKeystoreTunnelSecretStoreTest {
             assertNotNull(storedCiphertext)
             assertArrayEquals(secret, store.get(profileId, secretName))
 
-            // The profile ID and secret name are authenticated as AES-GCM AAD.
-            assertThrows(AEADBadTagException::class.java) {
-                store.get(profileId, "different-secret-name")
+            // A different identifier normally addresses a different storage entry.
+            assertNull(store.get(profileId, "different-secret-name"))
+            assertNull(store.get("${profileId}-other", secretName))
+
+            // Copy ciphertext under alternate storage keys to exercise AAD authentication.
+            val alternateNameKey = "secret." + encodeIdentifier(profileId) + "." + encodeIdentifier("different-secret-name")
+            preferences.edit().putString(alternateNameKey, storedCiphertext).commit()
+            try {
+                assertThrows(AEADBadTagException::class.java) {
+                    store.get(profileId, "different-secret-name")
+                }
+            } finally {
+                preferences.edit().remove(alternateNameKey).commit()
             }
-            assertThrows(AEADBadTagException::class.java) {
-                store.get("${profileId}-other", secretName)
+
+            val alternateProfileKey = "secret." + encodeIdentifier("${profileId}-other") + "." + encodeIdentifier(secretName)
+            preferences.edit().putString(alternateProfileKey, storedCiphertext).commit()
+            try {
+                assertThrows(AEADBadTagException::class.java) {
+                    store.get("${profileId}-other", secretName)
+                }
+            } finally {
+                preferences.edit().remove(alternateProfileKey).commit()
             }
 
             // Flip a ciphertext bit while preserving its IV and encoded storage shape.
