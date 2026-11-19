@@ -51,10 +51,12 @@ object ResolverListParser {
                 suffix.drop(1).toIntOrNull() ?: return null
             }
             if (!isIpv6(address)) return null
-        } else if (endpoint.count { it == ':' } == 1 && endpoint.substringBefore(':').contains(".")) {
+        } else if (endpoint.count { it == ':' } == 1) {
             address = endpoint.substringBefore(':')
             port = endpoint.substringAfter(':').toIntOrNull() ?: return null
-            if (!isIpv4(address)) return null
+            val validIpv4 = isIpv4(address)
+            val validHostname = hostnamePattern.matches(address) && !address.matches(Regex("^[0-9.]+$"))
+            if (!validIpv4 && !validHostname) return null
         } else {
             address = endpoint
             port = 53
