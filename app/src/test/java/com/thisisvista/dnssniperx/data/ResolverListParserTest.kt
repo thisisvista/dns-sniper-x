@@ -73,6 +73,16 @@ class ResolverListParserTest {
         assertTrue(result.isEmpty())
     }
 
+    @Test fun acceptsFullyQualifiedHostnamesWithTrailingDot() {
+        val result = ResolverListParser.parse(
+            "resolver.example.\\ndns.google.,53,US"
+        )
+        assertEquals(2, result.size)
+        assertEquals("resolver.example.", result[0].address)
+        assertEquals("dns.google.", result[1].address)
+        assertTrue(result.all { it.port == 53 })
+    }
+
     @Test fun parsesCustomPortsForHostnamesAndPreservesExplicitEndpointPorts() {
         val result = ResolverListParser.parse(
             "resolver.example,5353,US\n1.2.3.4:5354,53,IR"
