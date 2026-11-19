@@ -44,6 +44,12 @@ interface ResolverDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(entry: ScanHistoryEntity)
 
+    @Query("SELECT * FROM doh_history ORDER BY testedAt DESC, id DESC LIMIT 100")
+    fun observeRecentDohHistory(): Flow<List<DohHistoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDohHistory(entries: List<DohHistoryEntity>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(resolvers: List<ResolverEntity>): List<Long>
 

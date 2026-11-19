@@ -31,7 +31,8 @@
 - [x] Add timeouts, bounded concurrency, cancellation/pause-resume, and latency measurements.
 - [x] Add basic NXDOMAIN and EDNS payload diagnostics.
 - [x] Add RFC 8484 DoH diagnostics for a fixed set of public HTTPS providers; keep results separate from UDP/TCP resolver tests.
-- [ ] Add configurable DoH endpoints and persistent DoH result history.
+- [ ] Add configurable DoH endpoints.
+- [x] Persist DoH provider results locally (latest 100 records).
 - [ ] Evaluate DoT as a separate transport.
 - [ ] Complete real-device testing on Wi-Fi and mobile networks.
 

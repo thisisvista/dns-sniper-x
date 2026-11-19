@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.DohProbe
 import com.thisisvista.dnssniperx.data.DohProbeResult
+import com.thisisvista.dnssniperx.data.DohHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
@@ -71,6 +72,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val resolvers by dao.observeAll().collectAsState(initial = emptyList())
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
+    val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
     var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
@@ -157,6 +159,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             count = count,
             resolvers = resolvers,
             history = recentHistory,
+            dohHistory = recentDohHistory,
             importText = importText,
             onImportTextChange = { importText = it },
             message = message,
@@ -175,6 +178,10 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         message = "Testing DNS-over-HTTPS providers…"
                         try {
                             dohResults = DohProbe.testAll()
+                            val testedAt = System.currentTimeMillis()
+                            dao.insertDohHistory(dohResults.map { result ->
+                                DohHistoryEntity(provider = result.provider, endpoint = result.endpoint, testedAt = testedAt, status = result.status, latencyMs = result.latencyMs, detail = result.detail)
+                            })
                             val passed = dohResults.count { it.status == "PASS" }
                             message = "DoH checks complete: $passed of ${dohResults.size} providers returned a valid DNS response."
                         } finally {
@@ -374,6 +381,7 @@ private fun HomeContent(
     count: Int,
     resolvers: List<ResolverEntity>,
     history: List<ScanHistoryEntity>,
+    dohHistory: List<DohHistoryEntity>,
     importText: String,
     onImportTextChange: (String) -> Unit,
     message: String,
@@ -541,6 +549,23 @@ private fun HomeContent(
                         Text(result.provider, fontWeight = FontWeight.SemiBold)
                         Text("${result.status}${result.latencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
                         Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        Text("Recent DoH history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Latest 100 DoH checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (dohHistory.isEmpty()) {
+            Text("No DoH history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            dohHistory.take(20).forEach { entry ->
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(entry.provider, fontWeight = FontWeight.SemiBold)
+                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
+                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
