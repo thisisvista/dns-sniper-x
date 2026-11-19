@@ -1,57 +1,52 @@
 # Architecture
 
 ## Product boundary
-
 DNS SniperX is an independent Android application. SlipNet is a possible destination for exported resolver results; it is not a runtime dependency.
 
 ## Layers
-
 | Layer | Responsibility |
 |---|---|
 | UI | Compose screens, progress, resolver list, filters, histories and controls |
 | Collector | Reviewed public HTTPS source downloads, parsing, deduplication and provenance |
-| Domain | Resolver endpoint model, parser and per-transport outcomes |
+| Domain | Resolver endpoint model, parser, per-transport outcomes, tunnel profile metadata and lifecycle state |
 | Storage | Room database: resolver library, source collection history, scan history, DoH history and DoT history (schema v7) |
 | Scanner | UDP/TCP DNS probes, EDNS/NXDOMAIN diagnostics, separate DoH and DoT checks |
-| Tunnel tests | Real DNSTT/Slipstream end-to-end checks; not implemented |
+| Tunnel adapters | Future DNSTT/Slipstream native clients and Android VPN integration; not implemented |
 | Export | General resolver TXT export and dedicated SlipNet scanner TXT export |
 
-## Public source collection
+## Tunnel domain model
+The current tunnel foundation is deliberately non-operational. TunnelProfile validates protocol-specific public connection metadata for DNSTT and Slipstream, while TunnelStateMachine guards allowed lifecycle transitions. No tunnel sockets, native clients, Android VpnService, credentials, private keys, certificates, or secret persistence are implemented. A CONNECTED state is only a state-machine value in tests or future orchestration; it is not evidence of network connectivity.
 
+Tunnel profiles currently contain only non-secret metadata. Secret provisioning and encrypted storage must be designed before credentials are accepted or persisted. DNSTT public-key metadata and Slipstream TLS server-name metadata are kept protocol-specific to prevent accidental configuration mixing.
+
+## Public source collection
 The collector currently uses four reviewed public lists: a regional Iran list, Public DNS Info, Trickest resolvers, and a global public DNS directory. Sources are fetched concurrently; the regional source is processed first so its provenance is retained when duplicate endpoints are merged.
 
-The collector accepts HTTPS URLs only from the explicit host allowlist `public-dns.info` and `raw.githubusercontent.com`. Automatic redirects are disabled. Each redirect is resolved and validated against the same HTTPS, hostname, default-port, and no-user-info policy before another request is made. Redirects are limited to three hops. This prevents a reviewed source from redirecting collection traffic to an arbitrary host or downgrading to HTTP.
+The collector accepts HTTPS URLs only from the explicit host allowlist public-dns.info and raw.githubusercontent.com. Automatic redirects are disabled. Each redirect is resolved and validated against the same HTTPS, hostname, default-port, and no-user-info policy before another request is made. Redirects are limited to three hops.
 
-Downloads use bounded connect/read timeouts and per-source character and line limits. The response reader enforces the character cap incrementally before appending each character, so a single extremely long line cannot be fully allocated by `readLine()` before the limit is checked. The line limit is also enforced strictly: after the configured number of newline-terminated lines, the collector checks for additional content and reports an error rather than silently returning a truncated list. Parsing and endpoint validation occur before candidates are returned to storage. Failed sources are reported independently; one unavailable or oversized source does not prevent the others from being processed.
+Downloads use bounded connect/read timeouts and per-source character and line limits. The response reader enforces the character cap incrementally before appending each character. The line limit is enforced strictly; oversized responses are rejected rather than silently truncated. Parsing and endpoint validation occur before candidates are returned to storage.
 
 ## Resolver identity and provenance
-
-A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The resolver rows retain source IDs when duplicate endpoints are merged. A separate local collection history stores each source ID, display name, exact configured URL, retrieval timestamp, candidate count, and any fetch error. Terms/license notes are nullable and currently shown as "not documented"; the app does not infer or claim a license. The database prunes older attempts and retains only the latest 100; the UI displays the latest 20.
+A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record. A separate local collection history stores source ID, display name, exact configured URL, retrieval timestamp, candidate count, and fetch error. Terms/license notes remain undocumented until verified; the app does not infer or claim a license.
 
 ## DNS probe behaviour
+The scanner sends a recursive A query for example.com over UDP and TCP independently. It validates transaction identity and the returned question. Results and latency are stored separately by transport. Scans run in batches of up to 500 entries, with at most eight active resolvers and a bounded socket timeout. Results are persisted progressively and scans can be paused and resumed.
 
-The scanner sends a recursive A query for `example.com` over UDP and TCP independently. It validates transaction identity and the returned question. Results and latency are stored separately by transport. Scans are processed in batches of up to 500 entries, with at most eight active resolvers and a bounded socket timeout. Results are persisted as scanning progresses and the scan can be paused and resumed.
-
-A valid DNS response proves reachability for that transport only. EDNS payload and reserved-domain NXDOMAIN checks are diagnostics; unexpected positive answers are warning signals, not proof of malicious interception. DoH and DoT connectivity checks are stored separately. None of these checks proves censorship circumvention, tunnel delegation, or DNSTT/Slipstream end-to-end support.
+A valid DNS response proves reachability for that transport only. EDNS and reserved-domain NXDOMAIN checks are diagnostics, not proof of malicious interception. DoH and DoT checks are separate. None proves censorship circumvention, tunnel delegation, or DNSTT/Slipstream end-to-end support.
 
 ## DoH and DoT
-
-DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT checks use TLS on port 853 with hostname verification and the platform trust store. These diagnostics and their histories are separate from ordinary UDP/TCP resolver results; neither is an end-to-end tunnel test.
+DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT checks use TLS on port 853 with hostname verification and the platform trust store. Neither is an end-to-end tunnel test.
 
 ## Export interoperability
-
-The general resolver export retains endpoint ports and supports bracketed IPv6. The dedicated SlipNet scanner export follows the scanner's accepted text format: unique working IPv4 addresses on port 53, one address per line. SlipNet profile resolver input is a separate format with its own limits; the scanner export must not be described as a profile export.
+The general resolver export retains endpoint ports and supports bracketed IPv6. The dedicated SlipNet scanner export follows its scanner text format: unique working IPv4 addresses on port 53, one address per line. SlipNet profile resolver input is a separate format.
 
 ## Storage and migrations
-
 Room schema version 7 contains resolver records, source collection history, scan history, DoH history, and DoT history. Registered migrations cover versions 1→2 through 6→7. Histories are stored locally.
 
 ## Offline behaviour
-
 Offline mode can display the locally stored resolver library and prior results. Discovering new public resolvers or validating live network reachability requires internet connectivity.
 
 ## Network and privacy boundaries
-
 - Collection is limited to reviewed public sources and user-provided imports.
 - Source URLs and redirect targets are validated against a fixed HTTPS host allowlist.
 - Downloads, concurrency, and response sizes are bounded.
