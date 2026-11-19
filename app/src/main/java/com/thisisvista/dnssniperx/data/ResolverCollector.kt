@@ -63,6 +63,8 @@ object ResolverCollector {
     /**
      * Reads incrementally so an oversized single line cannot be fully allocated
      * by BufferedReader.readLine() before the response-size limit is checked.
+     * If the line cap is reached, one extra read distinguishes an exact-size
+     * response from a silently truncated oversized response.
      */
     internal fun readBoundedContent(
         reader: BufferedReader,
@@ -79,6 +81,9 @@ object ResolverCollector {
             val character = next.toChar()
             builder.append(character)
             if (character == '\n') lineCount++
+        }
+        if (lineCount >= maxLines && reader.read() != -1) {
+            error("Source exceeded the line limit")
         }
         return builder.toString()
     }

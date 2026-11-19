@@ -38,8 +38,16 @@ class ResolverCollectorTest {
         assertEquals("Source exceeded the size limit", error?.message)
     }
 
-    @Test fun boundedReaderStopsAtLineLimit() {
+    @Test fun boundedReaderRejectsContentBeyondLineLimit() {
         val reader = BufferedReader(StringReader("one\ntwo\nthree\n"))
+        val error = runCatching {
+            ResolverCollector.readBoundedContent(reader, maxChars = 100, maxLines = 2)
+        }.exceptionOrNull()
+        assertEquals("Source exceeded the line limit", error?.message)
+    }
+
+    @Test fun boundedReaderAcceptsContentAtExactLineLimit() {
+        val reader = BufferedReader(StringReader("one\ntwo\n"))
         assertEquals("one\ntwo\n", ResolverCollector.readBoundedContent(reader, maxChars = 100, maxLines = 2))
     }
 
