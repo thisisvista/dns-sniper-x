@@ -7,7 +7,7 @@ import java.net.InetAddress
  * Parses one resolver endpoint per line. Syntax validation only; no network test is performed.
  */
 object ResolverListParser {
-    private val hostnamePattern = Regex("^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+    private val hostnamePattern = Regex("^(?=.{1,254}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$")
     private val ipv4Pattern = Regex("^(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
     private val csvHeaderValues = setOf("ip", "ip_address", "address", "resolver", "dns", "nameserver", "name_server", "server", "host")
 
