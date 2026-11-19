@@ -26,8 +26,8 @@ class ResolverListParserTest {
 
     @Test fun rejectsInvalidPortsForIpv4AndIpv6Endpoints() {
         val result = ResolverListParser.parse(
-            "1.1.1.1:0\\n1.1.1.1:65536\\n1.1.1.1:not-a-port\\n" +
-                "[2001:db8::1]:0\\n[2001:db8::1]:65536\\n[2001:db8::1]:abc"
+            "1.1.1.1:0\n1.1.1.1:65536\n1.1.1.1:not-a-port\n" +
+                "[2001:db8::1]:0\n[2001:db8::1]:65536\n[2001:db8::1]:abc"
         )
         assertTrue(result.isEmpty())
     }
