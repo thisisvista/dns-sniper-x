@@ -36,6 +36,7 @@
 - [ ] Add configurable DoH endpoints.
 - [x] Persist DoH provider results locally (latest 100 records).
 - [x] Add DoT diagnostics as a separate TLS transport on port 853 with hostname verification.
+- [x] Persist DoT provider results locally (latest 100 records).
 - [ ] Complete real-device testing on Wi-Fi and mobile networks.
 
 ## Stage 4 — Tunnel compatibility

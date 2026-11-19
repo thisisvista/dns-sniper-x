@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class], version = 5, exportSchema = false)
+@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class], version = 6, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
 
@@ -63,6 +63,23 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS dot_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        provider TEXT NOT NULL,
+                        hostname TEXT NOT NULL,
+                        testedAt INTEGER NOT NULL,
+                        status TEXT NOT NULL,
+                        latencyMs INTEGER,
+                        detail TEXT NOT NULL
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_dot_history_testedAt ON dot_history(testedAt)")
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -71,7 +88,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { instance = it }
             }
     }
 }

@@ -32,7 +32,7 @@ The DoH diagnostic sends a DNS wire-format query to a fixed allowlist of Cloudfl
 
 ## DNS-over-TLS diagnostics
 
-The DoT diagnostic connects to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard hostnames on TCP port 853. It enables TLS hostname verification, relies on the platform trust store, sends a length-prefixed DNS wire query, and validates the DNS transaction and question. DoT results are kept separate from UDP/TCP resolver outcomes. This is a transport reachability check, not a tunnel-compatibility test.
+The DoT diagnostic connects to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard hostnames on TCP port 853. It enables TLS hostname verification, relies on the platform trust store, sends a length-prefixed DNS wire query, and validates the DNS transaction and question. DoT results are kept separate from UDP/TCP resolver outcomes. The latest 100 checks are stored locally in a dedicated history table and shown separately in the dashboard. This is a transport reachability check, not a tunnel-compatibility test.
 
 ## Result meanings
 

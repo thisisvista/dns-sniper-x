@@ -75,6 +75,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
+    val recentDotHistory by dao.observeRecentDotHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
     var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
@@ -164,6 +165,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             resolvers = resolvers,
             history = recentHistory,
             dohHistory = recentDohHistory,
+            dotHistory = recentDotHistory,
             importText = importText,
             onImportTextChange = { importText = it },
             message = message,
@@ -184,6 +186,10 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         message = "Testing DNS-over-TLS providers…"
                         try {
                             dotResults = DotProbe.testAll()
+                            val testedAt = System.currentTimeMillis()
+                            dao.insertDotHistory(dotResults.map { result ->
+                                DotHistoryEntity(provider = result.provider, hostname = result.hostname, testedAt = testedAt, status = result.status, latencyMs = result.latencyMs, detail = result.detail)
+                            })
                             val passed = dotResults.count { it.status == "PASS" }
                             message = "DoT checks complete: $passed of ${dotResults.size} providers returned a valid DNS response."
                         } finally {
@@ -404,6 +410,7 @@ private fun HomeContent(
     resolvers: List<ResolverEntity>,
     history: List<ScanHistoryEntity>,
     dohHistory: List<DohHistoryEntity>,
+    dotHistory: List<DotHistoryEntity>,
     importText: String,
     onImportTextChange: (String) -> Unit,
     message: String,
@@ -618,6 +625,22 @@ private fun HomeContent(
                     Text(result.provider + " (" + result.hostname + ")", fontWeight = FontWeight.SemiBold)
                     Text(result.status + (result.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
                     Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Text("Recent DoT history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Latest 100 DoT checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (dotHistory.isEmpty()) {
+            Text("No DoT history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            dotHistory.take(20).forEach { entry ->
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(entry.provider + " (" + entry.hostname + ")", fontWeight = FontWeight.SemiBold)
+                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
+                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
