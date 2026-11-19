@@ -243,7 +243,13 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                 pending.chunked(500).forEachIndexed { batchIndex, batch ->
                                     message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
                                     DnsProbe.scan(batch) { result ->
-                                        val best = listOfNotNull(result.udp.latencyMs, result.tcp.latencyMs).minOrNull()
+                                        // Only a valid DNS response counts as a working transport.
+                                        // DNS errors and timeouts may have timings, but must not
+                                        // become the saved "best working latency".
+                                        val best = listOfNotNull(
+                                            result.udp.latencyMs.takeIf { result.udp.status == "PASS" },
+                                            result.tcp.latencyMs.takeIf { result.tcp.status == "PASS" }
+                                        ).minOrNull()
                                         val overall = when {
                                             result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
                                             result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
