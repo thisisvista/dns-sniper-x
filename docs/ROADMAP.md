@@ -4,43 +4,46 @@
 
 - [x] Create the independent GitHub repository.
 - [x] Add the initial Android Gradle project structure.
-- [x] Add a basic Compose screen and project documentation.
 - [ ] Add and verify the Gradle wrapper.
-- [ ] Run the first Android build in CI and fix any build issues.
+- [x] Run Android builds in CI and fix build issues.
 
 ## Stage 1 — Resolver data foundation
 
-- [ ] Define a validated resolver model.
-- [ ] Add Room / SQLite persistence and migration strategy.
-- [ ] Add manual single and bulk import (IP, optional port, and transport where supplied).
-- [ ] Normalize and deduplicate records without losing source information.
-- [ ] Add local search, filters, and history views.
+- [x] Define and validate resolver endpoints (IPv4, IPv6, hostnames, and optional ports).
+- [x] Add Room / SQLite persistence and a migration strategy.
+- [x] Add manual paste and bulk TXT/CSV import.
+- [x] Normalize and deduplicate resolver endpoints.
+- [x] Add local search and incremental list display.
+- [ ] Preserve all source provenance when the same resolver appears in multiple sources.
+- [ ] Add dedicated scan history and richer filters.
 
 ## Stage 2 — Collection
 
-- [ ] Implement configurable source adapters.
-- [ ] Record source URL, retrieval time, and license/terms notes.
-- [ ] Add safe download limits, parsing validation, and deduplication.
-- [ ] Provide clear errors when sources are unreachable.
+- [x] Collect candidates from reviewed public HTTPS sources, including a regional Iran list.
+- [x] Add download size/time limits, syntax validation, and deduplication.
+- [x] Report source download errors.
+- [ ] Make source adapters configurable.
+- [ ] Record source URL, retrieval time, and license/terms notes for each source.
 
 ## Stage 3 — DNS diagnostics
 
-- [ ] Implement UDP DNS query tests.
-- [ ] Implement TCP DNS query tests independently.
-- [ ] Evaluate DoH and DoT as separate transports.
-- [ ] Add timeouts, bounded concurrency, cancellation, and latency measurements.
-- [ ] Test on real Wi-Fi and mobile networks.
+- [x] Implement independent UDP and TCP DNS probes.
+- [x] Add timeouts, bounded concurrency, cancellation/pause-resume, and latency measurements.
+- [x] Add basic NXDOMAIN and EDNS payload diagnostics.
+- [ ] Evaluate and implement DoH and DoT as separate transports.
+- [ ] Complete real-device testing on Wi-Fi and mobile networks.
 
 ## Stage 4 — Tunnel compatibility
 
-- [ ] Audit Findns source packages and dependencies.
+- [ ] Audit Findns source packages and dependencies without copying its code.
 - [ ] Evaluate DNSTT client availability on Android ARM64.
 - [ ] Evaluate Slipstream client build and runtime feasibility on Android.
-- [ ] Build controlled end-to-end tests only when a valid test server is available.
+- [ ] Build controlled end-to-end tests only when a valid test server and required credentials/certificates are available.
 - [ ] Never report basic DNS success as tunnel success.
 
 ## Stage 5 — Export and usability
 
+- [x] Export resolvers with at least one successful UDP/TCP test, preserving non-default ports and IPv6 formatting.
 - [ ] Confirm SlipNet's accepted import format from its source/documentation.
 - [ ] Add grouped export with validation and a clear compatibility label.
 - [ ] Add share/save actions and export history.
@@ -48,7 +51,8 @@
 
 ## Stage 6 — Release readiness
 
-- [ ] Add automated unit and instrumentation tests.
+- [x] Add automated unit tests and a CI debug-APK build.
+- [ ] Add instrumentation tests.
 - [ ] Test on a range of Android versions and device memory sizes.
 - [ ] Add privacy and network-use disclosures.
 - [ ] Produce signed release builds and publish release notes.
