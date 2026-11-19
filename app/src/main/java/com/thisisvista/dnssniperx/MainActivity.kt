@@ -44,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.DnsProbe
+import com.thisisvista.dnssniperx.data.DohProbe
+import com.thisisvista.dnssniperx.data.DohProbeResult
 import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
@@ -77,6 +79,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var importProgress by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
     var scanProgress by rememberSaveable { mutableStateOf("") }
+    var isDohTesting by rememberSaveable { mutableStateOf(false) }
+    var dohResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DohProbeResult>()) }
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -161,6 +165,24 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             importProgress = importProgress,
             isScanning = isScanning,
             scanProgress = scanProgress,
+            isDohTesting = isDohTesting,
+            dohResults = dohResults,
+            onTestDoh = {
+                if (!isDohTesting && !isCollecting && !isImporting && !isScanning) {
+                    scope.launch {
+                        isDohTesting = true
+                        dohResults = emptyList()
+                        message = "Testing DNS-over-HTTPS providers…"
+                        try {
+                            dohResults = DohProbe.testAll()
+                            val passed = dohResults.count { it.status == "PASS" }
+                            message = "DoH checks complete: $passed of ${dohResults.size} providers returned a valid DNS response."
+                        } finally {
+                            isDohTesting = false
+                        }
+                    }
+                }
+            },
             onCollectNetworkDns = { provider ->
                 scope.launch {
                     try {
@@ -360,6 +382,9 @@ private fun HomeContent(
     importProgress: String,
     isScanning: Boolean,
     scanProgress: String,
+    isDohTesting: Boolean,
+    dohResults: List<DohProbeResult>,
+    onTestDoh: () -> Unit,
     onCollect: () -> Unit,
     onCollectNetworkDns: (String) -> Unit,
     onScan: (retryUnsuccessful: Boolean) -> Unit,
@@ -488,6 +513,37 @@ private fun HomeContent(
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
             } else Text("Fetch public DNS lists")
+        }
+
+        Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = onTestDoh,
+            enabled = !isDohTesting && !isCollecting && !isImporting && !isScanning,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (isDohTesting) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                Text("  Testing DoH providers…")
+            } else Text("Test public DoH providers")
+        }
+        if (dohResults.isNotEmpty()) {
+            dohResults.forEach { result ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(result.provider, fontWeight = FontWeight.SemiBold)
+                        Text("${result.status}${result.latencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
 
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

@@ -30,7 +30,9 @@
 - [x] Implement independent UDP and TCP DNS probes.
 - [x] Add timeouts, bounded concurrency, cancellation/pause-resume, and latency measurements.
 - [x] Add basic NXDOMAIN and EDNS payload diagnostics.
-- [ ] Evaluate and implement DoH and DoT as separate transports.
+- [x] Add RFC 8484 DoH diagnostics for a fixed set of public HTTPS providers; keep results separate from UDP/TCP resolver tests.
+- [ ] Add configurable DoH endpoints and persistent DoH result history.
+- [ ] Evaluate DoT as a separate transport.
 - [ ] Complete real-device testing on Wi-Fi and mobile networks.
 
 ## Stage 4 — Tunnel compatibility

@@ -12,7 +12,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
 | Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
 | Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, and scan history (schema v4) |
-| Scanner | DNS transport probes | UDP and TCP query probes; EDNS and NXDOMAIN diagnostics |
+| Scanner | DNS transport probes | UDP/TCP resolver probes; separate RFC 8484 DoH checks for four fixed public HTTPS providers; EDNS and NXDOMAIN diagnostics |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
 | Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
 
@@ -25,6 +25,10 @@ Scanning is processed in batches of up to 500 saved entries, with at most 8 reso
 The test runs through Android's currently active network route. Results may differ between mobile operators, Wi-Fi networks, locations and times. The probe does not perform broad address-range scanning.
 
 A valid DNS response proves only DNS reachability on that transport. It does not establish tunnel delegation, EDNS compatibility, DNSTT/Slipstream support, or end-to-end connectivity.
+
+## DNS-over-HTTPS diagnostics
+
+The DoH diagnostic sends a DNS wire-format query to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard HTTPS endpoints using POST with `application/dns-message`. It validates the returned DNS transaction and question using the same packet validator as UDP/TCP. HTTPS certificate and hostname verification use the platform defaults; redirects are not followed. DoH outcomes are displayed separately and are not stored as ordinary IP resolver results. This is a connectivity diagnostic, not a tunnel-compatibility test.
 
 ## Result meanings
 
