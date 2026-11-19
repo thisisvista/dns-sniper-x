@@ -44,9 +44,10 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           emulator-boot-timeout: 1200
+          # The runner's default animation-disabling command can fail with
+          # Broken pipe on slow emulator boots; skip that optional operation.
+          disable-animations: false
           # Wait for Android's package and activity services, not only adb boot.
-          # The runner can report boot complete while framework services are
-          # still unavailable; Gradle then fails installing the test APK.
           script: |
             adb wait-for-device
             for attempt in $(seq 1 36); do
