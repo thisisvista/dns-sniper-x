@@ -41,10 +41,11 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: pixel_2
+          profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
-          emulator-boot-timeout: 900
-          disable-animations: true
+          emulator-boot-timeout: 1200
+          # Do not use disable-animations here: its post-boot adb settings
+          # command intermittently loses the emulator and fails with EPIPE.
           script: gradle connectedDebugAndroidTest
 
       - name: Build debug APK
