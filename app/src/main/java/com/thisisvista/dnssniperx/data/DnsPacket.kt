@@ -101,7 +101,7 @@ internal object DnsPacket {
             )
         }
 
-        val metadata = inspectAdditionalRecords(response, queryType)
+        val metadata = inspectAdditionalRecords(response, queryType, queryName.value)
         val responseCode = (metadata.extendedRcode shl 4) or (flags and 0x000f)
         val responseCodeName = when (responseCode) {
             0 -> "NOERROR"
@@ -122,7 +122,7 @@ internal object DnsPacket {
     }
 
     /** Inspects OPT records in the Additional section; absence is informational, not a DNS failure. */
-    private fun inspectAdditionalRecords(packet: ByteArray, queryType: Int): PacketMetadata {
+    private fun inspectAdditionalRecords(packet: ByteArray, queryType: Int, queryName: String): PacketMetadata {
         var offset = 12
         val questions = unsignedShort(packet, 4)
         val answers = unsignedShort(packet, 6)
@@ -148,7 +148,7 @@ internal object DnsPacket {
             val dataLength = unsignedShort(packet, offset + 8)
             val dataStart = offset + 10
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
-            if (index < answers && recordClass == 1) {
+            if (index < answers && recordClass == 1 && owner.value.equals(queryName, ignoreCase = true)) {
                 when (type) {
                     1 -> {
                         require(dataLength == 4) { "Invalid A record length" }

@@ -486,6 +486,45 @@ class DnsPacketTest {
     }
 
     @Test
+    fun ignoresAddressAnswerForUnrelatedOwnerName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+            this[11] = 0
+            // A valid A record, but for other.com rather than example.com.
+            addAll(listOf(5, 'o'.code, 't'.code, 'h'.code, 'e'.code, 'r'.code,
+                3, 'c'.code, 'o'.code, 'm'.code, 0,
+                0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 2, 3, 4).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("NO_ANSWER", result.status)
+    }
+
+    @Test
+    fun ignoresCnameAnswerForUnrelatedOwnerName() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+            this[11] = 0
+            // other.com is an unrelated owner, even though its CNAME data is valid.
+            addAll(listOf(5, 'o'.code, 't'.code, 'h'.code, 'e'.code, 'r'.code,
+                3, 'c'.code, 'o'.code, 'm'.code, 0,
+                0, 5, 0, 1, 0, 0, 0, 0, 0, 19,
+                5, 'a'.code, 'l'.code, 'i'.code, 'a'.code, 's'.code,
+                7, 'e'.code, 'x'.code, 'a'.code, 'm'.code, 'p'.code, 'l'.code, 'e'.code,
+                3, 'n'.code, 'e'.code, 't'.code, 0).map { it.toByte() })
+        }.toByteArray()
+
+        val result = DnsPacket.validateResponse(query, response)
+        assertEquals("NO_ANSWER", result.status)
+    }
+
+    @Test
     fun rejectsMalformedARecordEvenWhenQueryAskedForAaaa() {
         val query = DnsPacket.buildQuery("example.com", 42, queryType = 28)
         val response = responseWithAddressRecord(query, type = 1, data = listOf(1, 2, 3))
