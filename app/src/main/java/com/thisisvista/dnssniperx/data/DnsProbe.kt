@@ -138,7 +138,7 @@ object DnsProbe {
                 "EDNS payload check inconclusive (" + a + "; " + b + ")"
             }
         }
-        return base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
+        return appendDiagnostic(base, diagnostic)
     }
 
     /**
@@ -160,11 +160,22 @@ object DnsProbe {
             val second = if (first.status == "PASS") { try { randomInvalidQuery() } catch (_: Exception) { null } } else null
             val third = if (second?.status == "PASS") { try { randomInvalidQuery() } catch (_: Exception) { null } } else null
             val diagnostic = classifyNxDomainResponses(first, second, third)
-            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
+            appendDiagnostic(base, diagnostic)
         } catch (exception: Exception) {
             val diagnostic = "NXDOMAIN check unavailable: ${exception.message?.take(80) ?: "network error"}"
             base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
         }
+    }
+
+
+    internal fun appendDiagnostic(base: ProbeResult, diagnostic: String, maxLength: Int = 360): ProbeResult {
+        val entries = listOfNotNull(
+            base.detail?.takeIf { it.isNotBlank() },
+            diagnostic.takeIf { it.isNotBlank() }
+        )
+        val prioritized = entries.filter { it.contains("WARNING:", ignoreCase = true) } +
+            entries.filterNot { it.contains("WARNING:", ignoreCase = true) }
+        return base.copy(detail = prioritized.joinToString("; ").take(maxLength).ifBlank { null })
     }
 
     internal fun buildDiagnosticNote(udpDetail: String?, tcpDetail: String?): String? {

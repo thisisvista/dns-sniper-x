@@ -27,6 +27,14 @@ class DnsProbeTest {
         assertTrue(note.length <= 240)
     }
 
+    @Test fun anomalyWarningIsPrioritizedBeforeDiagnosticTruncation() {
+        val longDetail = "EDNS payload check inconclusive " + "x".repeat(340)
+        val warning = "WARNING: three random reserved .invalid names unexpectedly resolved"
+        val result = DnsProbe.appendDiagnostic(ProbeResult("PASS", detail = longDetail), warning)
+        assertTrue(result.detail!!.startsWith(warning))
+        assertTrue(result.detail!!.length <= 360)
+    }
+
     @Test fun noDiagnosticReturnsNull() {
         assertTrue(DnsProbe.buildDiagnosticNote(null, null) == null)
     }
