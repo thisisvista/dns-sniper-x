@@ -72,4 +72,15 @@ class ResolverListParserTest {
         )
         assertTrue(result.isEmpty())
     }
+
+    @Test fun parsesCustomPortsForHostnamesAndPreservesExplicitEndpointPorts() {
+        val result = ResolverListParser.parse(
+            "resolver.example,5353,US\n1.2.3.4:5354,53,IR"
+        )
+        assertEquals(2, result.size)
+        assertEquals("resolver.example", result[0].address)
+        assertEquals(5353, result[0].port)
+        assertEquals("1.2.3.4", result[1].address)
+        assertEquals(5354, result[1].port)
+    }
 }
