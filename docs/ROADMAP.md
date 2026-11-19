@@ -35,8 +35,8 @@
 
 ## Stage 4 — Tunnel compatibility
 
-- [ ] Evaluate Android DNSTT client feasibility.
-- [ ] Evaluate Android Slipstream client feasibility.
+- [x] Evaluate Android DNSTT client feasibility (see [TUNNEL_FEASIBILITY.md](TUNNEL_FEASIBILITY.md)).
+- [x] Evaluate Android Slipstream client feasibility (see [TUNNEL_FEASIBILITY.md](TUNNEL_FEASIBILITY.md)).
 - [ ] Implement controlled end-to-end checks only with a valid test server and required credentials/certificates.
 - [ ] Never infer tunnel success from ordinary DNS reachability.
 
