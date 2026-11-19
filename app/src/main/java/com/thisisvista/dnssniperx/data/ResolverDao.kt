@@ -9,6 +9,18 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ResolverDao {
+    @Query("SELECT * FROM tunnel_profiles ORDER BY updatedAt DESC, name COLLATE NOCASE ASC")
+    fun observeTunnelProfiles(): Flow<List<TunnelProfileEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveTunnelProfile(profile: TunnelProfileEntity)
+
+    @Query("SELECT * FROM tunnel_profiles WHERE id = :profileId LIMIT 1")
+    suspend fun findTunnelProfile(profileId: String): TunnelProfileEntity?
+
+    @Query("DELETE FROM tunnel_profiles WHERE id = :profileId")
+    suspend fun deleteTunnelProfile(profileId: String)
+
     @Query("""
         SELECT * FROM resolvers
         ORDER BY
