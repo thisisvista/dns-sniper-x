@@ -539,7 +539,7 @@ class DnsPacketTest {
                 3, 'n'.code, 'e'.code, 't'.code, 0).map { it.toByte() })
             // alias.example.net -> edge.example.org; 0x29 is the first target name.
             addAll(listOf(0xc0, 0x29, 0, 5, 0, 1, 0, 0, 0, 0, 0, 18,
-                5, 'e'.code, 'd'.code, 'g'.code, 'e'.code, 7, 'e'.code, 'x'.code,
+                4, 'e'.code, 'd'.code, 'g'.code, 'e'.code, 7, 'e'.code, 'x'.code,
                 'a'.code, 'm'.code, 'p'.code, 'l'.code, 'e'.code,
                 3, 'o'.code, 'r'.code, 'g'.code, 0).map { it.toByte() })
             // The A record belongs to edge.example.org; 0x48 is the second target name.
