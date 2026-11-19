@@ -1,7 +1,6 @@
 package com.thisisvista.dnssniperx.data
 
 import android.content.Context
-import android.security.keystore.KeyStoreException
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
