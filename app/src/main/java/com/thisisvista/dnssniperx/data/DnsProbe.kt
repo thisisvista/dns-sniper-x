@@ -158,7 +158,8 @@ object DnsProbe {
             }
             val first = randomInvalidQuery()
             val second = if (first.status == "PASS") { try { randomInvalidQuery() } catch (_: Exception) { null } } else null
-            val diagnostic = classifyNxDomainResponses(first, second)
+            val third = if (second?.status == "PASS") { try { randomInvalidQuery() } catch (_: Exception) { null } } else null
+            val diagnostic = classifyNxDomainResponses(first, second, third)
             base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
         } catch (exception: Exception) {
             val diagnostic = "NXDOMAIN check unavailable: ${exception.message?.take(80) ?: "network error"}"
@@ -166,12 +167,21 @@ object DnsProbe {
         }
     }
 
-    internal fun classifyNxDomainResponses(first: DnsPacket.ResponseInfo, second: DnsPacket.ResponseInfo?): String = when {
+    internal fun classifyNxDomainResponses(
+        first: DnsPacket.ResponseInfo,
+        second: DnsPacket.ResponseInfo?,
+        third: DnsPacket.ResponseInfo? = null
+    ): String = when {
         first.responseCode == 3 -> "NXDOMAIN check: expected non-existent-domain response"
-        first.status == "PASS" && second?.status == "PASS" -> "WARNING: two random reserved .invalid names unexpectedly resolved; possible wildcard DNS or response interception"
-        first.status == "PASS" && second?.responseCode == 3 -> "NXDOMAIN check inconclusive: random-name responses were inconsistent"
-        first.status == "PASS" && second == null -> "NXDOMAIN check inconclusive: second random-name confirmation was unavailable"
-        first.status == "PASS" -> "NXDOMAIN check inconclusive: second random name did not return a positive answer"
+        first.status == "PASS" && second?.status == "PASS" && third?.status == "PASS" ->
+            "WARNING: three random reserved .invalid names unexpectedly resolved; possible wildcard DNS or response interception"
+        first.status == "PASS" && second?.responseCode == 3 ->
+            "NXDOMAIN check inconclusive: random-name responses were inconsistent"
+        first.status == "PASS" && second?.status == "PASS" && third?.responseCode == 3 ->
+            "NXDOMAIN check inconclusive: third random-name response was NXDOMAIN"
+        first.status == "PASS" && (second == null || (second.status == "PASS" && third == null)) ->
+            "NXDOMAIN check inconclusive: confirmation queries were unavailable"
+        first.status == "PASS" -> "NXDOMAIN check inconclusive: random-name responses were not consistently positive"
         first.responseCode == 0 -> "NXDOMAIN check inconclusive: NOERROR without an address"
         else -> "NXDOMAIN check inconclusive: RCODE ${first.responseCode}"
     }
