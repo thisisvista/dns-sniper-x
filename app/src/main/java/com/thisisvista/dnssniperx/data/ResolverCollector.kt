@@ -60,6 +60,29 @@ object ResolverCollector {
             url.userInfo == null
     }.getOrDefault(false)
 
+    /**
+     * Reads incrementally so an oversized single line cannot be fully allocated
+     * by BufferedReader.readLine() before the response-size limit is checked.
+     */
+    internal fun readBoundedContent(
+        reader: BufferedReader,
+        maxChars: Int = MAX_CHARS_PER_SOURCE,
+        maxLines: Int = MAX_LINES_PER_SOURCE
+    ): String {
+        require(maxChars >= 0 && maxLines >= 0)
+        val builder = StringBuilder(minOf(maxChars, 16_384))
+        var lineCount = 0
+        while (lineCount < maxLines) {
+            val next = reader.read()
+            if (next == -1) break
+            if (builder.length >= maxChars) error("Source exceeded the size limit")
+            val character = next.toChar()
+            builder.append(character)
+            if (character == '\n') lineCount++
+        }
+        return builder.toString()
+    }
+
     suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
         withContext(Dispatchers.IO) {
             // Fetch the reviewed sources concurrently so one slow or unreachable
@@ -120,19 +143,9 @@ object ResolverCollector {
             try {
                 val status = connection.responseCode
                 if (status in 200..299) {
-                    val builder = StringBuilder()
                     BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
-                        var lineCount = 0
-                        while (lineCount < MAX_LINES_PER_SOURCE) {
-                            val line = reader.readLine() ?: break
-                            if (builder.length + line.length > MAX_CHARS_PER_SOURCE) {
-                                error("Source exceeded the size limit")
-                            }
-                            builder.append(line).append('\n')
-                            lineCount++
-                        }
+                        return readBoundedContent(reader)
                     }
-                    return builder.toString()
                 }
 
                 if (status in 300..399) {

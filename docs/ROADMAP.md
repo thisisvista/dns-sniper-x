@@ -19,6 +19,7 @@
 
 - [x] Collect from reviewed public HTTPS lists, including a regional Iran list.
 - [x] Bound connection/read time, response characters, and lines per source.
+- [x] Enforce response character limits while reading, including oversized single-line responses.
 - [x] Restrict source URLs and every redirect target to the reviewed HTTPS host allowlist.
 - [x] Fetch independent sources concurrently and report per-source failures.
 - [ ] Make source adapters configurable without weakening URL policy.
