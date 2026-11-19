@@ -97,15 +97,24 @@ private fun DnsSniperXApp(dao: ResolverDao) {
         if (uri != null) {
             scope.launch {
                 try {
-                    val contents = context.contentResolver.openInputStream(uri)
-                        ?.bufferedReader()?.use { it.readText() }
+                    val reader = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()
                         ?: error("Could not open the selected file.")
-                    val parsed = ResolverListParser.parse(contents, source = "txt-import")
-                    val inserted = if (parsed.isEmpty()) 0 else dao.insertIgnore(parsed).count { it != -1L }
-                    val skipped = parsed.size - inserted
+                    var validCount = 0
+                    var inserted = 0
+                    reader.use { input ->
+                        input.lineSequence().chunked(500).forEach { lines ->
+                            val parsed = ResolverListParser.parse(lines.joinToString("\n"), source = "txt-import")
+                            validCount += parsed.size
+                            if (parsed.isNotEmpty()) {
+                                inserted += dao.insertIgnore(parsed).count { it != -1L }
+                            }
+                        }
+                    }
+                    val skipped = validCount - inserted
                     message = when {
-                        parsed.isEmpty() -> "No valid DNS entries found in the TXT file."
-                        inserted == 0 -> "The file contained ${parsed.size} valid entries, but all were already saved."
+                        validCount == 0 -> "No valid DNS entries found in the TXT file."
+                        inserted == 0 -> "The file contained $validCount valid entries, but all were already saved."
                         skipped > 0 -> "Imported $inserted new DNS entries from TXT; skipped $skipped duplicates."
                         else -> "Imported $inserted DNS entries from TXT successfully."
                     }
