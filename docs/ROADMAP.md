@@ -10,12 +10,13 @@
 ## Stage 1 — Resolver data foundation
 
 - [x] Define and validate resolver endpoints (IPv4, IPv6, hostnames, and optional ports).
-- [x] Add Room / SQLite persistence and a migration strategy (schema v4 includes scan history).
+- [x] Add Room / SQLite persistence and a migration strategy (schema v5 includes scan and DoH history).
 - [x] Add manual paste and bulk TXT/CSV import.
 - [x] Normalize and deduplicate resolver endpoints.
 - [x] Add local search and incremental list display.
 - [x] Preserve source IDs when the same resolver appears in multiple sources.
-- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).\n- [x] Add result filters for working, per-transport success, untested, warnings, timeout, DNS error, no answer, truncated, and failed outcomes.
+- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).
+- [x] Add result filters for working, per-transport success, untested, warnings, timeout, DNS error, no answer, truncated, and failed outcomes.
 
 ## Stage 2 — Collection
 
@@ -30,6 +31,7 @@
 - [x] Implement independent UDP and TCP DNS probes.
 - [x] Add timeouts, bounded concurrency, cancellation/pause-resume, and latency measurements.
 - [x] Add basic NXDOMAIN and EDNS payload diagnostics.
+- [x] Confirm unexpected .invalid answers with a second random name before warning.
 - [x] Add RFC 8484 DoH diagnostics for a fixed set of public HTTPS providers; keep results separate from UDP/TCP resolver tests.
 - [ ] Add configurable DoH endpoints.
 - [x] Persist DoH provider results locally (latest 100 records).

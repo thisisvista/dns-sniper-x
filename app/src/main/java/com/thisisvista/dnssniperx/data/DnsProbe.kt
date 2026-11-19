@@ -147,32 +147,34 @@ object DnsProbe {
      * possible response interception, not proof of malicious behavior.
      */
     private fun addNxDomainDiagnostic(
-        address: InetAddress,
-        port: Int,
-        useTcp: Boolean,
-        base: ProbeResult
+        address: InetAddress, port: Int, useTcp: Boolean, base: ProbeResult
     ): ProbeResult {
         return try {
-            val randomLabel = "x${Random.nextLong().toString(16)}"
-            val testName = "$randomLabel.$NXDOMAIN_TEST_SUFFIX"
-            val query = DnsPacket.buildQuery(testName, Random.nextInt(0, 65_536), includeEdns = false)
-            val response = if (useTcp) tcpQuery(address, port, query)
-                else udpQuery(address, port, query)
-            val validation = DnsPacket.validateResponse(query, response)
-            val diagnostic = when {
-                validation.responseCode == 3 -> "NXDOMAIN check: expected non-existent-domain response"
-                validation.status == "PASS" -> "WARNING: reserved .invalid domain unexpectedly resolved; possible wildcard DNS or response interception"
-                validation.responseCode == 0 -> "NXDOMAIN check inconclusive: NOERROR without an address"
-                else -> "NXDOMAIN check inconclusive: RCODE ${validation.responseCode}"
+            fun randomInvalidQuery(): DnsPacket.ResponseInfo {
+                val label = "x${Random.nextLong().toString(16)}"
+                val query = DnsPacket.buildQuery("$label.$NXDOMAIN_TEST_SUFFIX", Random.nextInt(0, 65_536), includeEdns = false)
+                val response = if (useTcp) tcpQuery(address, port, query) else udpQuery(address, port, query)
+                return DnsPacket.validateResponse(query, response)
             }
-            val combined = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(240)
-            base.copy(detail = combined)
+            val first = randomInvalidQuery()
+            val second = if (first.status == "PASS") { try { randomInvalidQuery() } catch (_: Exception) { null } } else null
+            val diagnostic = classifyNxDomainResponses(first, second)
+            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
         } catch (exception: Exception) {
             val diagnostic = "NXDOMAIN check unavailable: ${exception.message?.take(80) ?: "network error"}"
-            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(240))
+            base.copy(detail = listOfNotNull(base.detail, diagnostic).joinToString("; ").take(360))
         }
     }
 
+    internal fun classifyNxDomainResponses(first: DnsPacket.ResponseInfo, second: DnsPacket.ResponseInfo?): String = when {
+        first.responseCode == 3 -> "NXDOMAIN check: expected non-existent-domain response"
+        first.status == "PASS" && second?.status == "PASS" -> "WARNING: two random reserved .invalid names unexpectedly resolved; possible wildcard DNS or response interception"
+        first.status == "PASS" && second?.responseCode == 3 -> "NXDOMAIN check inconclusive: random-name responses were inconsistent"
+        first.status == "PASS" && second == null -> "NXDOMAIN check inconclusive: second random-name confirmation was unavailable"
+        first.status == "PASS" -> "NXDOMAIN check inconclusive: second random name did not return a positive answer"
+        first.responseCode == 0 -> "NXDOMAIN check inconclusive: NOERROR without an address"
+        else -> "NXDOMAIN check inconclusive: RCODE ${first.responseCode}"
+    }
     private fun udpQuery(address: InetAddress, port: Int, query: ByteArray): ByteArray {
         DatagramSocket().use { socket ->
             socket.soTimeout = TIMEOUT_MS

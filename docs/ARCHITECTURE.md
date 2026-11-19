@@ -48,7 +48,7 @@ Resolver identity is the normalized address plus port. When the same endpoint is
 
 ## Database migration
 
-Schema version 3 adds the `additionalSources` field while retaining the existing UDP/TCP outcomes. Existing version 2 databases are migrated in place; the earlier version 1 to version 2 migration remains registered.
+Schema version 5 includes resolver scan history and a separate DoH history table. Migrations 1→2, 2→3, 3→4, and 4→5 are registered so existing databases upgrade in place.
 
 ## Safety and network behaviour
 
