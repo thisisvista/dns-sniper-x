@@ -14,10 +14,12 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | Tunnel adapters | Future DNSTT/Slipstream native clients and Android VPN integration; not implemented |
 | Export | General resolver TXT export and dedicated SlipNet scanner TXT export |
 
-## Tunnel domain model
-The current tunnel foundation is deliberately non-operational. TunnelProfile validates protocol-specific public connection metadata for DNSTT and Slipstream, while TunnelStateMachine guards allowed lifecycle transitions. No tunnel sockets, native clients, Android VpnService, credentials, private keys, certificates, or secret persistence are implemented. A CONNECTED state is only a state-machine value in tests or future orchestration; it is not evidence of network connectivity.
+## Tunnel domain model and secret handling
+TunnelProfile validates protocol-specific public connection metadata for DNSTT and Slipstream. TunnelStateMachine guards allowed lifecycle transitions. Neither starts networking or establishes a VPN.
 
-Tunnel profiles currently contain only non-secret metadata. Secret provisioning and encrypted storage must be designed before credentials are accepted or persisted. DNSTT public-key metadata and Slipstream TLS server-name metadata are kept protocol-specific to prevent accidental configuration mixing.
+AndroidKeystoreTunnelSecretStore provides an isolated credential-vault foundation. It encrypts each value with AES-256-GCM and a non-exportable AES key held in Android Keystore. Ciphertext alone is stored in app-private preferences; profile ID and secret name are authenticated as additional data to prevent moving a ciphertext between entries. The manifest disables Android app backup. The vault is not yet wired to profiles, UI, native clients, or a running tunnel. Device-level verification of encryption, tamper rejection, and key invalidation remains required before production use. Callers must clear secret byte arrays after use; secrets must never be logged.
+
+No tunnel sockets, native clients, Android VpnService, credential provisioning UI, or end-to-end connection checks are implemented. A CONNECTED state in the pure state machine is not evidence of network connectivity.
 
 ## Public source collection
 The collector currently uses four reviewed public lists: a regional Iran list, Public DNS Info, Trickest resolvers, and a global public DNS directory. Sources are fetched concurrently; the regional source is processed first so its provenance is retained when duplicate endpoints are merged.

@@ -34,7 +34,10 @@
 - [x] Evaluate Android Slipstream client feasibility.
 - [x] Add protocol-specific tunnel profile metadata validation (no secret persistence).
 - [x] Add a pure tunnel lifecycle state machine with transition tests.
-- [ ] Implement secure secret provisioning/storage and native client adapters.
+- [x] Add an Android Keystore-backed AES-GCM secret vault foundation (not yet connected to profiles or UI).
+- [ ] Add device-level tests for secret encryption, decryption, tamper rejection, and key invalidation.
+- [ ] Integrate secret provisioning with protocol-specific configuration.
+- [ ] Implement and audit native DNSTT/Slipstream client adapters.
 - [ ] Implement Android VpnService lifecycle and routing.
 - [ ] Implement controlled end-to-end checks only with a valid test server and required credentials/certificates.
 - [ ] Never infer tunnel success from ordinary DNS reachability.
