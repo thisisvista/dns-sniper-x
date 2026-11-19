@@ -44,6 +44,8 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           emulator-boot-timeout: 1200
+          # Hosted Ubuntu runners provide KVM; do not force unsupported TCG mode.
+          disable-linux-hardware-acceleration: false
           # Skip the optional animation command, which can fail on slow boots.
           disable-animations: false
           # The action waits for sys.boot_completed before running this command.
