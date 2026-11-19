@@ -284,7 +284,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             },
             onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
             onExportHealthy = {
-                val healthy = resolvers.filter { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
+                val healthy = resolvers
+                    .filter { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
+                    .sortedBy { resolver ->
+                        listOfNotNull(
+                            resolver.udpLatencyMs.takeIf { resolver.udpStatus == "PASS" },
+                            resolver.tcpLatencyMs.takeIf { resolver.tcpStatus == "PASS" }
+                        ).minOrNull() ?: Long.MAX_VALUE
+                    }
                 if (healthy.isEmpty()) {
                     message = "No working DNS entries are available to export yet. Run a scan first."
                 } else {
@@ -292,6 +299,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         appendLine("# DNS SniperX - working DNS resolvers")
                         appendLine("# Exported: ${java.time.Instant.now()}")
                         appendLine("# A resolver is included when UDP or TCP returned a valid DNS response.")
+                        appendLine("# Sorted by the fastest successful transport latency; entries without latency are last.")
                         healthy.forEach { appendLine(if (it.port == 53) it.address else "${it.address}:${it.port}") }
                     }
                     txtExportPicker.launch("dns-sniperx-working.txt")
