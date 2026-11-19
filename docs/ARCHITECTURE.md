@@ -22,7 +22,7 @@ The collector currently uses four reviewed public lists: a regional Iran list, P
 
 The collector accepts HTTPS URLs only from the explicit host allowlist `public-dns.info` and `raw.githubusercontent.com`. Automatic redirects are disabled. Each redirect is resolved and validated against the same HTTPS, hostname, default-port, and no-user-info policy before another request is made. Redirects are limited to three hops. This prevents a reviewed source from redirecting collection traffic to an arbitrary host or downgrading to HTTP.
 
-Downloads use bounded connect/read timeouts and per-source character and line limits. The response reader enforces the character cap incrementally before appending each character, so a single extremely long line cannot be fully allocated by `readLine()` before the limit is checked. Parsing and endpoint validation occur before candidates are returned to storage. Failed sources are reported independently; one unavailable source does not prevent the others from being processed.
+Downloads use bounded connect/read timeouts and per-source character and line limits. The response reader enforces the character cap incrementally before appending each character, so a single extremely long line cannot be fully allocated by `readLine()` before the limit is checked. The line limit is also enforced strictly: after the configured number of newline-terminated lines, the collector checks for additional content and reports an error rather than silently returning a truncated list. Parsing and endpoint validation occur before candidates are returned to storage. Failed sources are reported independently; one unavailable or oversized source does not prevent the others from being processed.
 
 ## Resolver identity and provenance
 
