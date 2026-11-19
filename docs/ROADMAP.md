@@ -35,7 +35,7 @@
 - [x] Add RFC 8484 DoH diagnostics for a fixed set of public HTTPS providers; keep results separate from UDP/TCP resolver tests.
 - [ ] Add configurable DoH endpoints.
 - [x] Persist DoH provider results locally (latest 100 records).
-- [ ] Evaluate DoT as a separate transport.
+- [x] Add DoT diagnostics as a separate TLS transport on port 853 with hostname verification.
 - [ ] Complete real-device testing on Wi-Fi and mobile networks.
 
 ## Stage 4 — Tunnel compatibility

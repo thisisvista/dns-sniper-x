@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.DohProbe
 import com.thisisvista.dnssniperx.data.DohProbeResult
+import com.thisisvista.dnssniperx.data.DotProbe
+import com.thisisvista.dnssniperx.data.DotProbeResult
 import com.thisisvista.dnssniperx.data.DohHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
@@ -83,6 +85,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var scanProgress by rememberSaveable { mutableStateOf("") }
     var isDohTesting by rememberSaveable { mutableStateOf(false) }
     var dohResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DohProbeResult>()) }
+    var isDotTesting by rememberSaveable { mutableStateOf(false) }
+    var dotResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DotProbeResult>()) }
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -170,8 +174,26 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             scanProgress = scanProgress,
             isDohTesting = isDohTesting,
             dohResults = dohResults,
+            isDotTesting = isDotTesting,
+            dotResults = dotResults,
+            onTestDot = {
+                if (!isDotTesting && !isDohTesting && !isCollecting && !isImporting && !isScanning) {
+                    scope.launch {
+                        isDotTesting = true
+                        dotResults = emptyList()
+                        message = "Testing DNS-over-TLS providers…"
+                        try {
+                            dotResults = DotProbe.testAll()
+                            val passed = dotResults.count { it.status == "PASS" }
+                            message = "DoT checks complete: $passed of ${dotResults.size} providers returned a valid DNS response."
+                        } finally {
+                            isDotTesting = false
+                        }
+                    }
+                }
+            },
             onTestDoh = {
-                if (!isDohTesting && !isCollecting && !isImporting && !isScanning) {
+                if (!isDohTesting && !isDotTesting && !isCollecting && !isImporting && !isScanning) {
                     scope.launch {
                         isDohTesting = true
                         dohResults = emptyList()
@@ -393,6 +415,9 @@ private fun HomeContent(
     isDohTesting: Boolean,
     dohResults: List<DohProbeResult>,
     onTestDoh: () -> Unit,
+    isDotTesting: Boolean,
+    dotResults: List<DotProbeResult>,
+    onTestDot: () -> Unit,
     onCollect: () -> Unit,
     onCollectNetworkDns: (String) -> Unit,
     onScan: (retryUnsuccessful: Boolean) -> Unit,
@@ -531,7 +556,7 @@ private fun HomeContent(
         )
         Button(
             onClick = onTestDoh,
-            enabled = !isDohTesting && !isCollecting && !isImporting && !isScanning,
+            enabled = !isDohTesting && !isDotTesting && !isCollecting && !isImporting && !isScanning,
             modifier = Modifier.fillMaxWidth()
         ) {
             if (isDohTesting) {
@@ -567,6 +592,32 @@ private fun HomeContent(
                         Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            }
+        }
+
+        Text("DNS-over-TLS (DoT) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Checks DNS-over-TLS on TCP port 853 with platform certificate validation and hostname verification. DoT results are separate from UDP/TCP resolver checks and do not test tunnel compatibility.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = onTestDot,
+            enabled = !isDotTesting && !isDohTesting && !isCollecting && !isImporting && !isScanning,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (isDotTesting) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
+                Text("  Testing DoT providers…")
+            } else Text("Test public DoT providers")
+        }
+        dotResults.forEach { result ->
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(result.provider + " (" + result.hostname + ")", fontWeight = FontWeight.SemiBold)
+                    Text(result.status + (result.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
+                    Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

@@ -12,7 +12,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
 | Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
 | Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, and scan history (schema v5) |
-| Scanner | DNS transport probes | UDP/TCP resolver probes; separate RFC 8484 DoH checks for four fixed public HTTPS providers; EDNS and NXDOMAIN diagnostics |
+| Scanner | DNS transport probes | UDP/TCP resolver probes; separate RFC 8484 DoH and DNS-over-TLS checks for four fixed public providers each; EDNS and NXDOMAIN diagnostics |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
 | Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
 
@@ -29,6 +29,10 @@ A valid DNS response proves only DNS reachability on that transport. It does not
 ## DNS-over-HTTPS diagnostics
 
 The DoH diagnostic sends a DNS wire-format query to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard HTTPS endpoints using POST with `application/dns-message`. It validates the returned DNS transaction and question using the same packet validator as UDP/TCP. HTTPS certificate and hostname verification use the platform defaults; redirects are not followed. DoH outcomes are displayed separately and stored in a dedicated local history table (latest 100 records), not as ordinary IP resolver results. This is a connectivity diagnostic, not a tunnel-compatibility test.
+
+## DNS-over-TLS diagnostics
+
+The DoT diagnostic connects to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard hostnames on TCP port 853. It enables TLS hostname verification, relies on the platform trust store, sends a length-prefixed DNS wire query, and validates the DNS transaction and question. DoT results are kept separate from UDP/TCP resolver outcomes. This is a transport reachability check, not a tunnel-compatibility test.
 
 ## Result meanings
 
