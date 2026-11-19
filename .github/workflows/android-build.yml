@@ -44,25 +44,10 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           emulator-boot-timeout: 1200
-          # The runner's default animation-disabling command can fail with
-          # Broken pipe on slow emulator boots; skip that optional operation.
+          # Skip the optional animation command, which can fail on slow boots.
           disable-animations: false
-          # Wait for Android's package and activity services, not only adb boot.
-          script: |
-            adb wait-for-device
-            for attempt in $(seq 1 36); do
-              if adb shell getprop sys.boot_completed | grep -q 1 \
-                && adb shell service check package 2>&1 | grep -q found \
-                && adb shell service check activity 2>&1 | grep -q found; then
-                echo "Android framework services are ready."
-                break
-              fi
-              echo "Waiting for Android framework services ($attempt/36)..."
-              sleep 5
-            done
-            adb shell service check package
-            adb shell service check activity
-            gradle connectedDebugAndroidTest
+          # The action waits for sys.boot_completed before running this command.
+          script: gradle connectedDebugAndroidTest
 
       - name: Build debug APK
         run: gradle assembleDebug
