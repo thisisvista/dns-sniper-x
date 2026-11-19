@@ -1,6 +1,9 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.DataOutputStream

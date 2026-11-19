@@ -1,6 +1,9 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -33,7 +36,10 @@ object DohProbe {
     private val transactionIds = AtomicInteger(Random.nextInt(0, 65_536))
 
     suspend fun testAll(): List<DohProbeResult> = withContext(Dispatchers.IO) {
-        providers.map { provider -> test(provider) }
+        coroutineScope {
+            // Four built-in providers can be checked concurrently; awaitAll preserves display order.
+            providers.map { provider -> async { test(provider) } }.awaitAll()
+        }
     }
 
     private fun test(provider: DohProvider): DohProbeResult {
