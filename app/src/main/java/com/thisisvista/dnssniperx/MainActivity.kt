@@ -47,6 +47,7 @@ import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.DohProbe
 import com.thisisvista.dnssniperx.data.DohProbeResult
 import com.thisisvista.dnssniperx.data.DotProbe
+import com.thisisvista.dnssniperx.data.DotHistoryEntity
 import com.thisisvista.dnssniperx.data.DotProbeResult
 import com.thisisvista.dnssniperx.data.DohHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverCollector
