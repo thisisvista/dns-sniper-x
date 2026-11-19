@@ -14,7 +14,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | Storage | Room database: resolver library, source collection history, scan history, DoH history and DoT history (schema v7) |
 | Scanner | UDP/TCP DNS probes, EDNS/NXDOMAIN diagnostics, separate DoH and DoT checks |
 | Tunnel tests | Real DNSTT/Slipstream end-to-end checks; not implemented |
-| Export | Resolver TXT export; SlipNet import compatibility still requires verification |
+| Export | General resolver TXT export and dedicated SlipNet scanner TXT export |
 
 ## Public source collection
 
@@ -32,11 +32,15 @@ A resolver endpoint is identified by normalized address plus port. Duplicate dis
 
 The scanner sends a recursive A query for `example.com` over UDP and TCP independently. It validates transaction identity and the returned question. Results and latency are stored separately by transport. Scans are processed in batches of up to 500 entries, with at most eight active resolvers and a bounded socket timeout. Results are persisted as scanning progresses and the scan can be paused and resumed.
 
-A valid DNS response proves reachability for that transport only. It does not prove censorship circumvention, tunnel delegation, EDNS compatibility, or DNSTT/Slipstream end-to-end support.
+A valid DNS response proves reachability for that transport only. EDNS payload and reserved-domain NXDOMAIN checks are diagnostics; unexpected positive answers are warning signals, not proof of malicious interception. DoH and DoT connectivity checks are stored separately. None of these checks proves censorship circumvention, tunnel delegation, or DNSTT/Slipstream end-to-end support.
 
 ## DoH and DoT
 
 DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT checks use TLS on port 853 with hostname verification and the platform trust store. These diagnostics and their histories are separate from ordinary UDP/TCP resolver results; neither is an end-to-end tunnel test.
+
+## Export interoperability
+
+The general resolver export retains endpoint ports and supports bracketed IPv6. The dedicated SlipNet scanner export follows the scanner's accepted text format: unique working IPv4 addresses on port 53, one address per line. SlipNet profile resolver input is a separate format with its own limits; the scanner export must not be described as a profile export.
 
 ## Storage and migrations
 

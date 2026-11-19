@@ -10,9 +10,10 @@ An independent Android app for discovering, storing, testing, and exporting DNS 
 - Manual paste and TXT-file import. Large TXT files are read in chunks of up to 500 lines; the user selects the file only once.
 - DNS scanning over UDP and TCP, with up to 8 concurrent resolvers and batches of up to 500 entries.
 - Scan progress, pause/resume, immediate persistence of completed results, and retry for unsuccessful or warning results.
-- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental list display.\n- Persistent scan history records endpoint, timestamp, UDP/TCP outcomes, latency, and scan/retry mode; latest 100 records are stored and latest 30 are shown.
-- NXDOMAIN and EDNS diagnostics are warnings/diagnostics, not proof of malicious interception or tunnel compatibility.
-- Export of entries with at least one successful transport, sorted by the fastest successful UDP/TCP latency. Non-default ports are retained; IPv6 endpoints are bracketed when a port is included.
+- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental list display.\n- Persistent scan, DoH, DoT, and source-collection histories are stored locally with bounded retention.
+- UDP/TCP scans include EDNS payload and randomized reserved-domain (`.invalid`) diagnostics. An anomaly warning is a signal for further investigation, not proof of malicious interception.
+- Separate DoH (RFC 8484) and DoT (TLS on port 853) connectivity diagnostics are available; they do not verify tunnel compatibility.
+- General resolver export retains non-default ports and formats IPv6 endpoints with brackets. A dedicated SlipNet scanner export emits only unique, working IPv4 resolvers on port 53, one IP per line.
 - Debug APK is built and uploaded as a GitHub Actions artifact after successful CI.
 
 ## Public collection sources
@@ -26,8 +27,10 @@ These sources provide candidates only. Entries may be stale, duplicated, or unre
 
 ## Scanner behavior and result meanings
 
-- The current probe sends a standard DNS query for `example.com A` over UDP and TCP.
+- The base probe sends a standard DNS query for `example.com A` over UDP and TCP, with a legacy retry when a server rejects EDNS.
 - UDP and TCP outcomes are recorded separately, including latency and last-tested time.
+- Additional diagnostics compare DNSSEC-sized EDNS UDP responses and query random names below the reserved `.invalid` TLD to identify possible wildcard or intercepted responses.
+- DoH and DoT checks are separate transport diagnostics with their own histories.
 - Scanning runs automatically in batches of up to 500 entries, with 8 concurrent resolvers. Completed results are saved as the scan progresses.
 - `PASS`: a valid DNS response was received.
 - `DNS_ERROR`: the resolver returned a DNS error response.
@@ -54,14 +57,14 @@ The parser accepts one endpoint per line, including:
 
 Port 53 is assumed when omitted. CSV-like sources with an address in the first column are also supported. Import performs syntax validation only; it does not test connectivity.
 
-The TXT export currently provides resolver endpoints (IP or IP:port, with bracketed IPv6 when needed). **Compatibility with SlipNet's exact import parser has not yet been verified.**
+General TXT export provides resolver endpoints (IP or IP:port, with bracketed IPv6 when needed). A separate SlipNet scanner TXT export follows the verified scanner format: unique working IPv4 addresses on port 53, one per line. SlipNet profile resolver input has different constraints and is not the same export format.
 
 ## Not implemented yet
 
-- DoH and DoT scanning as separate transports.
 - CIDR-range expansion and controlled resolver discovery.
-- Dedicated scan history and richer source metadata.
-- Full DNSTT and Slipstream end-to-end tunnel verification.
-- Verified ISP ownership classification.
+- Full DNSTT and Slipstream end-to-end tunnel verification with a valid test server and credentials/certificates.
+- Real-device instrumentation and network tests on Wi-Fi and mobile networks.
+- Signed release builds and release-readiness disclosures.
+- Verified ISP ownership classification; provider labels remain user-selected descriptions.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
