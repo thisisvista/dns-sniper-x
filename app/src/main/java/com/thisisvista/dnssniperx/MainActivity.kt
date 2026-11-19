@@ -300,7 +300,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         appendLine("# Exported: ${java.time.Instant.now()}")
                         appendLine("# A resolver is included when UDP or TCP returned a valid DNS response.")
                         appendLine("# Sorted by the fastest successful transport latency; entries without latency are last.")
-                        healthy.forEach { appendLine(if (it.port == 53) it.address else "${it.address}:${it.port}") }
+                        healthy.forEach { appendLine(formatResolverEndpoint(it.address, it.port, includeDefaultPort = false)) }
                     }
                     txtExportPicker.launch("dns-sniperx-working.txt")
                 }
@@ -559,7 +559,7 @@ private fun HomeContent(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("${resolver.address}:${resolver.port}", fontWeight = FontWeight.SemiBold)
+                        Text(formatResolverEndpoint(resolver.address, resolver.port), fontWeight = FontWeight.SemiBold)
                         Text(
                             "UDP: ${friendlyProbeStatus(resolver.udpStatus)}${resolver.udpLatencyMs?.let { " • ${it} ms" } ?: ""}",
                             style = MaterialTheme.typography.bodySmall,
@@ -603,6 +603,11 @@ private fun HomeContent(
     }
 }
 
+
+private fun formatResolverEndpoint(address: String, port: Int, includeDefaultPort: Boolean = true): String {
+    val host = if (address.contains(':')) "[$address]" else address
+    return if (port == 53 && !includeDefaultPort) address else "$host:$port"
+}
 
 private fun friendlyProbeStatus(status: String): String = when (status) {
     "PASS" -> "PASS — working response"
