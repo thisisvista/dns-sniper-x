@@ -73,8 +73,24 @@ object ResolverCollector {
             }.awaitAll()
 
             val results = fetched.map { it.first }
-            val entries = fetched.flatMap { it.second }
-            CollectionSummary(results) to entries.distinctBy { it.address.lowercase() to it.port }
+            val entriesByEndpoint = linkedMapOf<Pair<String, Int>, ResolverEntity>()
+            fetched.flatMap { it.second }.forEach { entry ->
+                val key = entry.address.lowercase() to entry.port
+                val existing = entriesByEndpoint[key]
+                if (existing == null) {
+                    entriesByEndpoint[key] = entry
+                } else {
+                    val mergedSources = (existing.additionalSources.lineSequence() +
+                        sequenceOf(entry.source) +
+                        entry.additionalSources.lineSequence())
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && it != existing.source }
+                        .distinct()
+                        .toList()
+                    entriesByEndpoint[key] = existing.copy(additionalSources = mergedSources.joinToString("\n"))
+                }
+            }
+            CollectionSummary(results) to entriesByEndpoint.values.toList()
         }
 
     private fun download(address: String): String {

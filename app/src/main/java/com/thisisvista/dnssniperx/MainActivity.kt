@@ -112,7 +112,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             val parsed = ResolverListParser.parse(lines.joinToString("\n"), source = "txt-import")
                             validCount += parsed.size
                             if (parsed.isNotEmpty()) {
-                                inserted += dao.insertIgnore(parsed).count { it != -1L }
+                                inserted += dao.insertOrMergeSources(parsed)
                             }
                             importProgress = "Processed $processedLines lines; saved $inserted new DNS entries…"
                         }
@@ -179,7 +179,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             message = "No DNS servers were exposed by the active network."
                         } else {
                             val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network ($networkType; user label: $provider)")
-                            val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
+                            val inserted = if (entries.isEmpty()) 0 else dao.insertOrMergeSources(entries)
                             message = "Detected ${addresses.size} DNS server(s) on $networkType; saved $inserted new DNS entries with label: $provider. ISP ownership is not verified."
                         }
                     } catch (exception: Exception) {
@@ -194,7 +194,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         message = "Downloading public resolver lists…"
                         try {
                             val (summary, entries) = ResolverCollector.downloadAndParse()
-                            val inserted = if (entries.isEmpty()) 0 else dao.insertIgnore(entries).count { it != -1L }
+                            val inserted = if (entries.isEmpty()) 0 else dao.insertOrMergeSources(entries)
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
                                 if (result.error == null) "${result.source}: ${result.found}" else "${result.source}: unavailable"
@@ -314,7 +314,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
                 scope.launch {
-                    val inserted = if (parsed.isEmpty()) 0 else dao.insertIgnore(parsed).count { it != -1L }
+                    val inserted = if (parsed.isEmpty()) 0 else dao.insertOrMergeSources(parsed)
                     val skipped = parsed.size - inserted
                     message = when {
                         parsed.isEmpty() -> "No valid DNS entries found. Check the format."
@@ -563,7 +563,9 @@ private fun HomeContent(
                     val providerLabel = resolver.source.substringAfter("user label: ", "Unspecified").substringBefore(")")
                     "Network: $networkType • Provider label: $providerLabel"
                 } else {
-                    "Source: ${resolver.source}"
+                    val allSources = (listOf(resolver.source) + resolver.additionalSources.lineSequence().toList())
+                        .filter { it.isNotBlank() }.distinct()
+                    "Sources: ${allSources.joinToString()}"
                 }
                 Card(
                     modifier = Modifier.fillMaxWidth(),

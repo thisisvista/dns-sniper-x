@@ -19,5 +19,6 @@ data class ResolverEntity(
     @ColumnInfo(defaultValue = "'NOT_TESTED'") val udpStatus: String = "NOT_TESTED",
     val udpLatencyMs: Long? = null,
     @ColumnInfo(defaultValue = "'NOT_TESTED'") val tcpStatus: String = "NOT_TESTED",
-    val tcpLatencyMs: Long? = null
+    val tcpLatencyMs: Long? = null,
+    val additionalSources: String = ""
 )

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -52,6 +53,37 @@ interface ResolverDao {
         bestLatency: Long?,
         note: String?
     )
+
+    @Query("SELECT * FROM resolvers WHERE address = :address AND port = :port LIMIT 1")
+    suspend fun findByEndpoint(address: String, port: Int): ResolverEntity?
+
+    @Query("UPDATE resolvers SET additionalSources = :sources WHERE id = :id")
+    suspend fun updateAdditionalSources(id: Long, sources: String)
+
+    @Transaction
+    suspend fun insertOrMergeSources(resolvers: List<ResolverEntity>): Int {
+        var insertedCount = 0
+        for (resolver in resolvers) {
+            val insertedId = insertIgnore(listOf(resolver)).firstOrNull() ?: -1L
+            if (insertedId != -1L) {
+                insertedCount++
+                continue
+            }
+            val existing = findByEndpoint(resolver.address, resolver.port) ?: continue
+            val mergedSources = (existing.additionalSources.lineSequence() +
+                sequenceOf(resolver.source) +
+                resolver.additionalSources.lineSequence())
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it != existing.source }
+                .distinct()
+                .toList()
+            val mergedText = mergedSources.joinToString("\n")
+            if (mergedText != existing.additionalSources) {
+                updateAdditionalSources(existing.id, mergedText)
+            }
+        }
+        return insertedCount
+    }
 
     @Query("DELETE FROM resolvers WHERE id = :id")
     suspend fun deleteById(id: Long)

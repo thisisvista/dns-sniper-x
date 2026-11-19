@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class], version = 2, exportSchema = false)
+@Database(entities = [ResolverEntity::class], version = 3, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
 
@@ -21,6 +21,12 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE resolvers ADD COLUMN additionalSources TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -29,7 +35,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }
