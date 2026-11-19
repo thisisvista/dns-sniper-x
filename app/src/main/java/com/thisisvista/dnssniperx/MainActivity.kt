@@ -315,6 +315,7 @@ private fun HomeContent(
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
     var selectedProviderLabel by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
+    var resolverSearch by rememberSaveable { mutableStateOf("") }
     var visibleResolverLimit by rememberSaveable { mutableStateOf(100) }
     val networkTypes = resolvers.mapNotNull { resolver ->
         resolver.source.takeIf { it.startsWith("current-network (") }
@@ -336,6 +337,11 @@ private fun HomeContent(
             ?.substringAfter("user label: ")?.substringBefore(")")
         val sourceMatches = (selectedNetworkType == "ALL" || networkType == selectedNetworkType) &&
             (selectedProviderLabel == "ALL" || providerLabel == selectedProviderLabel)
+        val searchMatches = resolverSearch.isBlank() ||
+            resolver.address.contains(resolverSearch.trim(), ignoreCase = true) ||
+            resolver.port.toString() == resolverSearch.trim() ||
+            resolver.source.contains(resolverSearch.trim(), ignoreCase = true) ||
+            resolver.note?.contains(resolverSearch.trim(), ignoreCase = true) == true
         val statusMatches = when (selectedFilter) {
             "WORKING" -> resolver.udpStatus == "PASS" || resolver.tcpStatus == "PASS"
             "UDP" -> resolver.udpStatus == "PASS"
@@ -344,7 +350,7 @@ private fun HomeContent(
             "WARNINGS" -> resolver.note?.contains("WARNING:", ignoreCase = true) == true
             else -> true
         }
-        sourceMatches && statusMatches
+        sourceMatches && statusMatches && searchMatches
     }.let { list ->
         if (fastestFirst) list.sortedBy { item -> listOfNotNull(item.udpLatencyMs, item.tcpLatencyMs).minOrNull() ?: Long.MAX_VALUE } else list
     }
@@ -455,6 +461,14 @@ private fun HomeContent(
         }
 
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = resolverSearch,
+            onValueChange = { resolverSearch = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Search DNS address, port, or source") },
+            placeholder = { Text("Example: 1.2.3.4 or iran-public") }
+        )
         Button(onClick = onExportHealthy, enabled = !isScanning && !isCollecting, modifier = Modifier.fillMaxWidth()) {
             Text("Export working DNS as TXT")
         }
