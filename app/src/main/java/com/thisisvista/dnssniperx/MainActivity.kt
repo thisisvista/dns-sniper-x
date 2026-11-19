@@ -332,10 +332,10 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                             result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
                                             else -> "FAILED"
                                         }
-                                        val notes = listOfNotNull(
-                                            result.udp.detail?.let { "UDP: $it" },
-                                            result.tcp.detail?.let { "TCP: $it" }
-                                        ).joinToString("; ").take(240).ifBlank { null }
+                                        val notes = DnsProbe.buildDiagnosticNote(
+                                            result.udp.detail,
+                                            result.tcp.detail
+                                        )
                                         val historyResolver = batch.firstOrNull { it.id == result.resolverId }
                                         dao.insertHistory(
                                             ScanHistoryEntity(

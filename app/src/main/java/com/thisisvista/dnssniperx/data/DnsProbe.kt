@@ -167,6 +167,19 @@ object DnsProbe {
         }
     }
 
+    internal fun buildDiagnosticNote(udpDetail: String?, tcpDetail: String?): String? {
+        val entries = listOfNotNull(
+            udpDetail?.takeIf { it.isNotBlank() }?.let { "UDP: $it" },
+            tcpDetail?.takeIf { it.isNotBlank() }?.let { "TCP: $it" }
+        )
+        if (entries.isEmpty()) return null
+        // Keep anomaly warnings first so the UI warning filter and retry action
+        // cannot lose them when the combined diagnostic is shortened.
+        val prioritized = entries.filter { it.contains("WARNING:", ignoreCase = true) } +
+            entries.filterNot { it.contains("WARNING:", ignoreCase = true) }
+        return prioritized.joinToString("; ").take(240).ifBlank { null }
+    }
+
     internal fun classifyNxDomainResponses(
         first: DnsPacket.ResponseInfo,
         second: DnsPacket.ResponseInfo?,
