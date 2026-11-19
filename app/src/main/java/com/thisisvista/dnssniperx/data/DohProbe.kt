@@ -64,11 +64,12 @@ object DohProbe {
                 error("HTTPS endpoint returned HTTP $httpStatus")
             }
             val contentType = connection.contentType?.substringBefore(';')?.trim()
+            val contentTypeLabel = contentType ?: "missing"
             require(contentType.equals("application/dns-message", ignoreCase = true)) {
-                "Unexpected DoH content type: \${contentType ?: "missing"}"
+                "Unexpected DoH content type: $contentTypeLabel"
             }
             require(connection.contentLengthLong <= MAX_RESPONSE_BYTES) {
-                "DoH response exceeds \${MAX_RESPONSE_BYTES} bytes"
+                "DoH response exceeds $MAX_RESPONSE_BYTES bytes"
             }
             val response = connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream()
@@ -77,7 +78,7 @@ object DohProbe {
                     val read = input.read(buffer)
                     if (read < 0) break
                     require(output.size() + read <= MAX_RESPONSE_BYTES) {
-                        "DoH response exceeds \${MAX_RESPONSE_BYTES} bytes"
+                        "DoH response exceeds $MAX_RESPONSE_BYTES bytes"
                     }
                     output.write(buffer, 0, read)
                 }
