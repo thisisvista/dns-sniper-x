@@ -8,10 +8,10 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 
 | Layer | Responsibility | Status |
 |---|---|---|
-| UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls |
+| UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls; separate DoH/DoT diagnostics and histories |
 | Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
 | Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
-| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, and scan history (schema v5) |
+| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, scan history, DoH history, and DoT history (schema v6) |
 | Scanner | DNS transport probes | UDP/TCP resolver probes; separate RFC 8484 DoH and DNS-over-TLS checks for four fixed public providers each; EDNS and NXDOMAIN diagnostics |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
 | Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
@@ -42,7 +42,13 @@ The DoT diagnostic connects to a fixed allowlist of Cloudflare, Google, Quad9, a
 
 ## Scan history
 
-Each completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.\n\n## Resolver list filtering
+Each completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.
+
+## DoH and DoT history
+
+DoH and DoT provider checks are stored in separate local tables, independently of ordinary UDP/TCP resolver results. Each history query retains the latest 100 records and the dashboard displays recent checks. These records are not exported or synchronized.
+
+## Resolver list filtering
 
 The saved resolver list can be filtered by overall working state, UDP or TCP success, untested entries, warnings, and individual failure outcomes (timeout, DNS error, no answer, truncated, or failed). Network type and user-assigned provider labels can be combined with text search; sorting can prioritize the fastest successful transport.
 
@@ -52,7 +58,7 @@ Resolver identity is the normalized address plus port. When the same endpoint is
 
 ## Database migration
 
-Schema version 5 includes resolver scan history and a separate DoH history table. Migrations 1→2, 2→3, 3→4, and 4→5 are registered so existing databases upgrade in place.
+Schema version 6 includes resolver scan history, a separate DoH history table, and a separate DoT history table. Migrations 1→2, 2→3, 3→4, 4→5, and 5→6 are registered so existing databases upgrade in place.
 
 ## Safety and network behaviour
 
