@@ -43,8 +43,9 @@
 ## Stage 5 — Export and interoperability
 
 - [x] Export successful resolver endpoints with non-default ports and IPv6 formatting.
-- [ ] Verify SlipNet's accepted import format against its source/documentation.
-- [ ] Add validated grouped export and test imports on real devices.
+- [x] Verify SlipNet's accepted import formats against its source/documentation (scanner TXT: IPs per line or comma-separated; profile resolvers: host or host:port, comma/newline-separated, maximum 10; IPv6 is rejected in profile resolver input).
+- [x] Add a dedicated SlipNet scanner TXT export: working IPv4 resolvers on port 53, one IP per line; exclude IPv6, non-default ports, and duplicates.
+- [ ] Test exported files with SlipNet on real devices.
 
 ## Stage 6 — Release readiness
 

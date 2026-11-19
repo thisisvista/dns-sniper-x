@@ -81,6 +81,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val recentSourceHistory by dao.observeRecentSourceCollectionHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
     var pendingExportText by rememberSaveable { mutableStateOf("") }
+    var pendingExportSuccessMessage by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
     var isImporting by rememberSaveable { mutableStateOf(false) }
@@ -102,8 +103,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
                     writer.write(pendingExportText)
                 } ?: error("Could not create the selected file.")
-                val exportedCount = pendingExportText.lineSequence().count { it.isNotBlank() && !it.startsWith("#") }
-                message = "Exported $exportedCount working DNS entries to TXT."
+                message = pendingExportSuccessMessage.ifBlank { "TXT export completed." }
             } catch (exception: Exception) {
                 message = "TXT export failed: ${exception.message ?: "Could not write file"}"
             }
@@ -397,6 +397,15 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         healthy.forEach { appendLine(formatResolverEndpoint(it.address, it.port, includeDefaultPort = false)) }
                     }
                     txtExportPicker.launch("dns-sniperx-working.txt")
+                }
+            },            onExportSlipNet = {
+                val result = SlipNetExportFormatter.format(resolvers)
+                if (result.exportedCount == 0) {
+                    message = "No working IPv4 DNS entries on port 53 are available for SlipNet export."
+                } else {
+                    pendingExportText = result.text
+                    pendingExportSuccessMessage = "Exported ${result.exportedCount} IPv4 resolvers for SlipNet; skipped ${result.skippedCount} incompatible or duplicate entries."
+                    txtExportPicker.launch("dns-sniperx-slipnet-ipv4.txt")
                 }
             },
             onImport = {
@@ -721,6 +730,9 @@ private fun HomeContent(
         )
         Button(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Export working DNS as TXT")
+        }
+        OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
+            Text("Export for SlipNet scanner (IPv4)")
         }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
