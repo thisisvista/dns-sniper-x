@@ -563,6 +563,11 @@ private fun HomeContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(sourceDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Last tested: ${resolver.lastTestedAt?.let { testedAt -> java.text.DateFormat.getDateTimeInstance().format(java.util.Date(testedAt)) } ?: "Not tested"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         resolver.note?.takeIf { it.isNotBlank() }?.let { detail ->
                             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
