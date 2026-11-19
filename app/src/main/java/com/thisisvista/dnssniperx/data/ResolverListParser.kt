@@ -17,9 +17,20 @@ object ResolverListParser {
             .map { it.removePrefix("\uFEFF").substringBefore("#").trim() }
             .filter { it.isNotEmpty() }
             .mapNotNull { line ->
-                val endpoint = line.substringBefore(",").trim().removeSurrounding("\"")
-                if (endpoint.lowercase() in csvHeaderValues) null
-                else parseEndpoint(endpoint, source.trim().ifEmpty { "manual" }, now)
+                val columns = line.split(',', limit = 3)
+                val address = columns.first().trim().removeSurrounding("\"")
+                if (address.lowercase() in csvHeaderValues) return@mapNotNull null
+
+                // Public resolver CSV files commonly provide the port in column two.
+                // Preserve explicit endpoint ports, and bracket bare IPv6 before adding
+                // a CSV port so the endpoint remains unambiguous.
+                val csvPort = columns.getOrNull(1)?.trim()?.removeSurrounding("\"")?.toIntOrNull()
+                val endpoint = when {
+                    csvPort == null || address.startsWith("[") || address.count { it == ':' } == 1 -> address
+                    address.count { it == ':' } > 1 -> "[$address]:$csvPort"
+                    else -> "$address:$csvPort"
+                }
+                parseEndpoint(endpoint, source.trim().ifEmpty { "manual" }, now)
             }
             .distinctBy { it.address.lowercase() to it.port }
             .toList()
