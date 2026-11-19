@@ -10,12 +10,12 @@
 ## Stage 1 — Resolver data foundation
 
 - [x] Define and validate resolver endpoints (IPv4, IPv6, hostnames, and optional ports).
-- [x] Add Room / SQLite persistence and a migration strategy.
+- [x] Add Room / SQLite persistence and a migration strategy (schema v4 includes scan history).
 - [x] Add manual paste and bulk TXT/CSV import.
 - [x] Normalize and deduplicate resolver endpoints.
 - [x] Add local search and incremental list display.
 - [x] Preserve source IDs when the same resolver appears in multiple sources.
-- [ ] Add dedicated scan history and richer filters.
+- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).\n- [ ] Add richer result filters.
 
 ## Stage 2 — Collection
 

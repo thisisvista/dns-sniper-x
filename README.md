@@ -4,13 +4,13 @@ An independent Android app for discovering, storing, testing, and exporting DNS 
 
 ## Current implementation
 
-- Android app with a local Room database (schema version 3) for saved resolver entries.
+- Android app with a local Room database (schema version 4) for saved resolver entries.
 - Public resolver collection over HTTPS from reviewed sources, including a regional Iran list.
 - When the same address and port appear in multiple sources, entries are merged and all source IDs are retained.
 - Manual paste and TXT-file import. Large TXT files are read in chunks of up to 500 lines; the user selects the file only once.
 - DNS scanning over UDP and TCP, with up to 8 concurrent resolvers and batches of up to 500 entries.
 - Scan progress, pause/resume, immediate persistence of completed results, and retry for unsuccessful or warning results.
-- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental list display.
+- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental list display.\n- Persistent scan history records endpoint, timestamp, UDP/TCP outcomes, latency, and scan/retry mode; latest 100 records are stored and latest 30 are shown.
 - NXDOMAIN and EDNS diagnostics are warnings/diagnostics, not proof of malicious interception or tunnel compatibility.
 - Export of entries with at least one successful transport, sorted by the fastest successful UDP/TCP latency. Non-default ports are retained; IPv6 endpoints are bracketed when a port is included.
 - Debug APK is built and uploaded as a GitHub Actions artifact after successful CI.

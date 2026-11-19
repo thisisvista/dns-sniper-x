@@ -38,6 +38,12 @@ interface ResolverDao {
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeCount(): Flow<Int>
 
+    @Query("SELECT * FROM scan_history ORDER BY testedAt DESC, id DESC LIMIT 100")
+    fun observeRecentHistory(): Flow<List<ScanHistoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertHistory(entry: ScanHistoryEntity)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(resolvers: List<ResolverEntity>): List<Long>
 

@@ -11,7 +11,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls |
 | Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
 | Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
-| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance (schema v3) |
+| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, and scan history (schema v4) |
 | Scanner | DNS transport probes | UDP and TCP query probes; EDNS and NXDOMAIN diagnostics |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
 | Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
@@ -32,7 +32,7 @@ A valid DNS response proves only DNS reachability on that transport. It does not
 2. **Tunnel compatibility:** requires additional protocol-specific checks; not implemented yet.
 3. **End-to-end success:** requires a real client and controlled test server; not implemented yet.
 
-## Resolver source provenance
+## Scan history\n\nEach completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.\n\n## Resolver source provenance
 
 Resolver identity is the normalized address plus port. When the same endpoint is found in multiple collector sources, the primary source and additional source IDs are retained rather than inserting duplicate rows. Source URLs, retrieval timestamps, and license/terms metadata are not yet persisted per resolver.
 

@@ -48,6 +48,7 @@ import com.thisisvista.dnssniperx.data.ResolverCollector
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
+import com.thisisvista.dnssniperx.data.ScanHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
 import kotlinx.coroutines.CancellationException
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
 private fun DnsSniperXApp(dao: ResolverDao) {
     val resolvers by dao.observeAll().collectAsState(initial = emptyList())
     val count by dao.observeCount().collectAsState(initial = 0)
+    val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
     var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
@@ -150,6 +152,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             contentPadding = innerPadding,
             count = count,
             resolvers = resolvers,
+            history = recentHistory,
             importText = importText,
             onImportTextChange = { importText = it },
             message = message,
@@ -259,6 +262,19 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                             result.udp.detail?.let { "UDP: $it" },
                                             result.tcp.detail?.let { "TCP: $it" }
                                         ).joinToString("; ").take(240).ifBlank { null }
+                                        val historyResolver = batch.firstOrNull { it.id == result.resolverId }
+                                        dao.insertHistory(
+                                            ScanHistoryEntity(
+                                                resolverAddress = historyResolver?.address ?: "Unknown",
+                                                resolverPort = historyResolver?.port ?: 53,
+                                                testedAt = System.currentTimeMillis(),
+                                                udpStatus = result.udp.status,
+                                                udpLatencyMs = result.udp.latencyMs,
+                                                tcpStatus = result.tcp.status,
+                                                tcpLatencyMs = result.tcp.latencyMs,
+                                                scanMode = if (retryUnsuccessful) "RETRY" else "SCAN"
+                                            )
+                                        )
                                         dao.updateScanResult(
                                             id = result.resolverId,
                                             udpStatus = result.udp.status,
@@ -335,6 +351,7 @@ private fun HomeContent(
     contentPadding: PaddingValues,
     count: Int,
     resolvers: List<ResolverEntity>,
+    history: List<ScanHistoryEntity>,
     importText: String,
     onImportTextChange: (String) -> Unit,
     message: String,
@@ -603,6 +620,26 @@ private fun HomeContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Show 100 more DNS entries")
+                }
+            }
+        }
+
+        Text("Recent scan history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Latest 100 saved probe results. Each row records the resolver endpoint, time, UDP/TCP outcomes, and whether it was a first scan or retry.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (history.isEmpty()) {
+            Text("No scan history yet. Results will appear here after the next scan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            history.take(30).forEach { entry ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(formatResolverEndpoint(entry.resolverAddress, entry.resolverPort), fontWeight = FontWeight.SemiBold)
+                        Text("UDP: ${friendlyProbeStatus(entry.udpStatus)}${entry.udpLatencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        Text("TCP: ${friendlyProbeStatus(entry.tcpStatus)}${entry.tcpLatencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        Text("${entry.scanMode} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

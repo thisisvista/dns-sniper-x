@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class], version = 3, exportSchema = false)
+@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class], version = 4, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
 
@@ -27,6 +27,25 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS scan_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        resolverAddress TEXT NOT NULL,
+                        resolverPort INTEGER NOT NULL,
+                        testedAt INTEGER NOT NULL,
+                        udpStatus TEXT NOT NULL,
+                        udpLatencyMs INTEGER,
+                        tcpStatus TEXT NOT NULL,
+                        tcpLatencyMs INTEGER,
+                        scanMode TEXT NOT NULL
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_scan_history_testedAt ON scan_history(testedAt)")
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -35,7 +54,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
     }
 }
