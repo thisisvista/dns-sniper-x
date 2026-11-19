@@ -32,7 +32,13 @@ A valid DNS response proves only DNS reachability on that transport. It does not
 2. **Tunnel compatibility:** requires additional protocol-specific checks; not implemented yet.
 3. **End-to-end success:** requires a real client and controlled test server; not implemented yet.
 
-## Scan history\n\nEach completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.\n\n## Resolver source provenance
+## Scan history
+
+Each completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.\n\n## Resolver list filtering
+
+The saved resolver list can be filtered by overall working state, UDP or TCP success, untested entries, warnings, and individual failure outcomes (timeout, DNS error, no answer, truncated, or failed). Network type and user-assigned provider labels can be combined with text search; sorting can prioritize the fastest successful transport.
+
+## Resolver source provenance
 
 Resolver identity is the normalized address plus port. When the same endpoint is found in multiple collector sources, the primary source and additional source IDs are retained rather than inserting duplicate rows. Source URLs, retrieval timestamps, and license/terms metadata are not yet persisted per resolver.
 

@@ -406,6 +406,11 @@ private fun HomeContent(
             "TCP" -> resolver.tcpStatus == "PASS"
             "UNTESTED" -> resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
             "WARNINGS" -> resolver.note?.contains("WARNING:", ignoreCase = true) == true
+            "TIMEOUT" -> resolver.udpStatus == "TIMEOUT" || resolver.tcpStatus == "TIMEOUT"
+            "DNS_ERROR" -> resolver.udpStatus == "DNS_ERROR" || resolver.tcpStatus == "DNS_ERROR"
+            "NO_ANSWER" -> resolver.udpStatus == "NO_ANSWER" || resolver.tcpStatus == "NO_ANSWER"
+            "TRUNCATED" -> resolver.udpStatus == "TRUNCATED" || resolver.tcpStatus == "TRUNCATED"
+            "FAIL" -> resolver.udpStatus == "FAIL" || resolver.tcpStatus == "FAIL"
             else -> true
         }
         sourceMatches && statusMatches && searchMatches
@@ -547,7 +552,12 @@ private fun HomeContent(
             Text("Export working DNS as TXT")
         }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP", "UNTESTED" to "Untested", "WARNINGS" to "Warnings").forEach { (key, label) ->
+            listOf(
+                "ALL" to "All", "WORKING" to "Working", "UDP" to "UDP", "TCP" to "TCP",
+                "UNTESTED" to "Untested", "WARNINGS" to "Warnings", "TIMEOUT" to "Timeout",
+                "DNS_ERROR" to "DNS error", "NO_ANSWER" to "No answer", "TRUNCATED" to "Truncated",
+                "FAIL" to "Failed"
+            ).forEach { (key, label) ->
                 FilterChip(selected = selectedFilter == key, onClick = { selectedFilter = key }, label = { Text(label) })
             }
         }

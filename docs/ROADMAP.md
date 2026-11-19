@@ -15,7 +15,7 @@
 - [x] Normalize and deduplicate resolver endpoints.
 - [x] Add local search and incremental list display.
 - [x] Preserve source IDs when the same resolver appears in multiple sources.
-- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).\n- [ ] Add richer result filters.
+- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).\n- [x] Add result filters for working, per-transport success, untested, warnings, timeout, DNS error, no answer, truncated, and failed outcomes.
 
 ## Stage 2 — Collection
 
