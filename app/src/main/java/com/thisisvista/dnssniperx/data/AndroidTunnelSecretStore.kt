@@ -33,16 +33,26 @@ class AndroidKeystoreTunnelSecretStore(context: Context) : TunnelSecretStore {
         require(secret.isNotEmpty()) { "Secret must not be empty" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        cipher.updateAAD(associatedData(profileId, secretName))
+        val aad = associatedData(profileId, secretName)
+        try {
+            cipher.updateAAD(aad)
+        } finally {
+            aad.fill(0)
+        }
         val encrypted = cipher.doFinal(secret)
         try {
-            val packed = cipher.iv + encrypted
+            val iv = cipher.iv
             try {
-                preferences.edit()
-                    .putString(storageKey(profileId, secretName), Base64.encodeToString(packed, Base64.NO_WRAP))
-                    .apply()
+                val packed = iv + encrypted
+                try {
+                    preferences.edit()
+                        .putString(storageKey(profileId, secretName), Base64.encodeToString(packed, Base64.NO_WRAP))
+                        .apply()
+                } finally {
+                    packed.fill(0)
+                }
             } finally {
-                packed.fill(0)
+                iv.fill(0)
             }
         } finally {
             encrypted.fill(0)
@@ -65,7 +75,12 @@ class AndroidKeystoreTunnelSecretStore(context: Context) : TunnelSecretStore {
             try {
                 val cipher = Cipher.getInstance(TRANSFORMATION)
                 cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_LENGTH_BITS, iv))
-                cipher.updateAAD(associatedData(profileId, secretName))
+                val aad = associatedData(profileId, secretName)
+                try {
+                    cipher.updateAAD(aad)
+                } finally {
+                    aad.fill(0)
+                }
                 return cipher.doFinal(ciphertext)
             } finally {
                 iv.fill(0)
