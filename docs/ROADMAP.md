@@ -24,7 +24,7 @@
 - [x] Restrict source URLs and every redirect target to the reviewed HTTPS host allowlist.
 - [x] Fetch independent sources concurrently and report per-source failures.
 - [ ] Make source adapters configurable without weakening URL policy.
-- [ ] Persist source URL, retrieval time, and license/terms notes.
+- [ ] Persist source ID/name/URL, retrieval time, candidate count, fetch errors, and nullable terms notes in local history (schema v7). Terms remain "not documented" until verified.
 
 ## Stage 3 — DNS diagnostics
 

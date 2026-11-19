@@ -55,6 +55,7 @@ import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
 import com.thisisvista.dnssniperx.data.ScanHistoryEntity
+import com.thisisvista.dnssniperx.data.SourceCollectionHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
 import kotlinx.coroutines.CancellationException
@@ -77,6 +78,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
     val recentDotHistory by dao.observeRecentDotHistory().collectAsState(initial = emptyList())
+    val recentSourceHistory by dao.observeRecentSourceCollectionHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
     var pendingExportText by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
@@ -167,6 +169,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             history = recentHistory,
             dohHistory = recentDohHistory,
             dotHistory = recentDotHistory,
+            sourceHistory = recentSourceHistory,
             importText = importText,
             onImportTextChange = { importText = it },
             message = message,
@@ -255,6 +258,17 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         message = "Downloading public resolver lists…"
                         try {
                             val (summary, entries) = ResolverCollector.downloadAndParse()
+                            dao.insertSourceCollectionHistory(summary.results.map { result ->
+                                SourceCollectionHistoryEntity(
+                                    sourceId = result.sourceId,
+                                    sourceName = result.source,
+                                    sourceUrl = result.sourceUrl,
+                                    retrievedAt = result.retrievedAt,
+                                    foundCount = result.found,
+                                    error = result.error,
+                                    termsNote = null
+                                )
+                            })
                             val inserted = if (entries.isEmpty()) 0 else dao.insertOrMergeSources(entries)
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
@@ -412,6 +426,7 @@ private fun HomeContent(
     history: List<ScanHistoryEntity>,
     dohHistory: List<DohHistoryEntity>,
     dotHistory: List<DotHistoryEntity>,
+    sourceHistory: List<SourceCollectionHistoryEntity>,
     importText: String,
     onImportTextChange: (String) -> Unit,
     message: String,
@@ -786,6 +801,25 @@ private fun HomeContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Show 100 more DNS entries")
+                }
+            }
+        }
+
+        Text("Recent public source collection history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Latest 100 source attempts are saved locally. A missing terms note means the source terms have not been documented in this app; it is not a license assertion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (sourceHistory.isEmpty()) {
+            Text("No source collection history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            sourceHistory.take(20).forEach { entry ->
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(entry.sourceName + " • " + entry.foundCount + " candidates", fontWeight = FontWeight.SemiBold)
+                        Text(entry.sourceId, style = MaterialTheme.typography.bodySmall)
+                        Text(entry.sourceUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.retrievedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (entry.error == null) "Fetch completed" else "Fetch failed: ${entry.error}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(entry.termsNote ?: "Terms/license: not documented", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

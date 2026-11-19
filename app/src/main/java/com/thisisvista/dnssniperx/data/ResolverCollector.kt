@@ -12,7 +12,15 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 data class ResolverSource(val id: String, val url: String, val description: String)
-data class SourceFetchResult(val source: String, val found: Int, val inserted: Int, val error: String? = null)
+data class SourceFetchResult(
+    val source: String,
+    val found: Int,
+    val inserted: Int,
+    val error: String? = null,
+    val sourceId: String = source,
+    val sourceUrl: String = "",
+    val retrievedAt: Long = System.currentTimeMillis()
+)
 data class CollectionSummary(val results: List<SourceFetchResult>) {
     val found: Int get() = results.sumOf { it.found }
     val failedSources: Int get() = results.count { it.error != null }
@@ -95,16 +103,18 @@ object ResolverCollector {
             val fetched = sources.map { source ->
                 async {
                     try {
+                        val retrievedAt = System.currentTimeMillis()
                         val content = download(source.url)
                         val parsed = ResolverListParser.parse(content, source = source.id)
                             .take(MAX_LINES_PER_SOURCE)
-                        SourceFetchResult(source.description, parsed.size, 0) to parsed
+                        SourceFetchResult(source.description, parsed.size, 0, sourceId = source.id, sourceUrl = source.url, retrievedAt = retrievedAt) to parsed
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (exception: Exception) {
                         SourceFetchResult(
                             source.description, 0, 0,
-                            exception.message?.take(160) ?: "Download failed"
+                            exception.message?.take(160) ?: "Download failed",
+                            sourceId = source.id, sourceUrl = source.url
                         ) to emptyList()
                     }
                 }

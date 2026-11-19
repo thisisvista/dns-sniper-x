@@ -11,7 +11,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | UI | Compose screens, progress, resolver list, filters, histories and controls |
 | Collector | Reviewed public HTTPS source downloads, parsing, deduplication and provenance |
 | Domain | Resolver endpoint model, parser and per-transport outcomes |
-| Storage | Room database: resolver library, source provenance, scan history, DoH history and DoT history (schema v6) |
+| Storage | Room database: resolver library, source collection history, scan history, DoH history and DoT history (schema v7) |
 | Scanner | UDP/TCP DNS probes, EDNS/NXDOMAIN diagnostics, separate DoH and DoT checks |
 | Tunnel tests | Real DNSTT/Slipstream end-to-end checks; not implemented |
 | Export | Resolver TXT export; SlipNet import compatibility still requires verification |
@@ -26,7 +26,7 @@ Downloads use bounded connect/read timeouts and per-source character and line li
 
 ## Resolver identity and provenance
 
-A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The database currently stores source IDs, but not the original source URL, retrieval timestamp, or source license/terms notes per record.
+A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The resolver rows retain source IDs when duplicate endpoints are merged. A separate local collection history stores each source ID, display name, exact configured URL, retrieval timestamp, candidate count, and any fetch error. Terms/license notes are nullable and currently shown as "not documented"; the app does not infer or claim a license. The history retains the latest 100 attempts and the UI displays the latest 20.
 
 ## DNS probe behaviour
 
@@ -40,7 +40,7 @@ DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT check
 
 ## Storage and migrations
 
-Room schema version 6 contains resolver records, scan history, DoH history, and DoT history. Registered migrations cover versions 1→2 through 5→6. Histories are stored locally.
+Room schema version 7 contains resolver records, source collection history, scan history, DoH history, and DoT history. Registered migrations cover versions 1→2 through 6→7. Histories are stored locally.
 
 ## Offline behaviour
 

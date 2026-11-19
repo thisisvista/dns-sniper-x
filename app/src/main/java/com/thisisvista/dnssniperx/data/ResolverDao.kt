@@ -41,6 +41,12 @@ interface ResolverDao {
     @Query("SELECT * FROM scan_history ORDER BY testedAt DESC, id DESC LIMIT 100")
     fun observeRecentHistory(): Flow<List<ScanHistoryEntity>>
 
+    @Query("SELECT * FROM source_collection_history ORDER BY retrievedAt DESC, id DESC LIMIT 100")
+    fun observeRecentSourceCollectionHistory(): Flow<List<SourceCollectionHistoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSourceCollectionHistory(entries: List<SourceCollectionHistoryEntity>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(entry: ScanHistoryEntity)
 
