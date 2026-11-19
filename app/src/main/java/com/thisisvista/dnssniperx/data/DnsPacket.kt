@@ -149,7 +149,7 @@ internal object DnsPacket {
             val dataLength = unsignedShort(packet, offset + 8)
             val dataStart = offset + 10
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
-            if (index < answers && recordClass == 1 && owner.value.equals(queryName, ignoreCase = true)) {
+            if (index < answers && recordClass == 1) {
                 when (type) {
                     1 -> {
                         require(dataLength == 4) { "Invalid A record length" }
@@ -215,9 +215,9 @@ internal object DnsPacket {
         // records for unrelated owners must not make this response a PASS.
         val reachableOwners = mutableSetOf(queryName.lowercase())
         var currentOwner = queryName.lowercase()
-        repeat(cnameTargets.size) {
-            val target = cnameTargets[currentOwner] ?: return@repeat
-            if (!reachableOwners.add(target)) return@repeat
+        while (true) {
+            val target = cnameTargets[currentOwner] ?: break
+            require(reachableOwners.add(target)) { "CNAME loop detected" }
             currentOwner = target
         }
         val hasRelevantAnswer = reachableOwners.any { it in cnameTargets || it in addressOwners }
