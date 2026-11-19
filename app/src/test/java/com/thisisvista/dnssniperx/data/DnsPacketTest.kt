@@ -486,6 +486,37 @@ class DnsPacketTest {
     }
 
     @Test
+    fun rejectsMalformedARecordEvenWhenQueryAskedForAaaa() {
+        val query = DnsPacket.buildQuery("example.com", 42, queryType = 28)
+        val response = responseWithAddressRecord(query, type = 1, data = listOf(1, 2, 3))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    @Test
+    fun rejectsMalformedAaaaRecordEvenWhenQueryAskedForA() {
+        val query = DnsPacket.buildQuery("example.com", 42, queryType = 1)
+        val response = responseWithAddressRecord(query, type = 28, data = List(15) { 0 })
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DnsPacket.validateResponse(query, response)
+        }
+    }
+
+    private fun responseWithAddressRecord(query: ByteArray, type: Int, data: List<Int>): ByteArray {
+        return query.copyOfRange(0, query.size - 11).toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[7] = 1
+            this[11] = 0
+            addAll(listOf(0xc0, 0x0c, 0, type, 0, 1, 0, 0, 0, 0, 0, data.size).map { it.toByte() })
+            addAll(data.map { it.toByte() })
+        }.toByteArray()
+    }
+
+    @Test
     fun rejectsARecordWithInvalidAddressLength() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOfRange(0, query.size - 11).toMutableList().apply {
