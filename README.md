@@ -4,12 +4,13 @@ An independent Android app for discovering, storing, testing, and exporting DNS 
 
 ## Current implementation
 
-- Android app with a local Room database for saved resolver entries.
-- Public resolver collection over HTTPS from the sources listed below, including a regional Iran list.
+- Android app with a local Room database (schema version 3) for saved resolver entries.
+- Public resolver collection over HTTPS from reviewed sources, including a regional Iran list.
+- When the same address and port appear in multiple sources, entries are merged and all source IDs are retained.
 - Manual paste and TXT-file import. Large TXT files are read in chunks of up to 500 lines; the user selects the file only once.
 - DNS scanning over UDP and TCP, with up to 8 concurrent resolvers and batches of up to 500 entries.
 - Scan progress, pause/resume, immediate persistence of completed results, and retry for unsuccessful or warning results.
-- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental display of saved entries.
+- Separate UDP and TCP status and latency, last-tested time, search, filtering, and incremental list display.
 - NXDOMAIN and EDNS diagnostics are warnings/diagnostics, not proof of malicious interception or tunnel compatibility.
 - Export of entries with at least one successful transport, sorted by the fastest successful UDP/TCP latency. Non-default ports are retained; IPv6 endpoints are bracketed when a port is included.
 - Debug APK is built and uploaded as a GitHub Actions artifact after successful CI.
@@ -21,7 +22,7 @@ An independent Android app for discovering, storing, testing, and exporting DNS 
 - Public DNS Directory — Iran: https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt
 - Public DNS Directory — global: https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt
 
-These sources provide candidates only. Entries may be stale, duplicated, or unreachable. DNS SniperX tests candidates on the phone's active network before treating them as working.
+These sources provide candidates only. Entries may be stale, duplicated, or unreachable. DNS SniperX tests candidates on the phone's active network before treating them as working. Source IDs are retained when duplicates are merged; source URL, retrieval timestamp, and license/terms metadata are not yet stored per resolver.
 
 ## Scanner behavior and result meanings
 
@@ -57,8 +58,9 @@ The TXT export currently provides resolver endpoints (IP or IP:port, with bracke
 
 ## Not implemented yet
 
-- DoH scanning.
-- CIDR-range expansion and large-scale resolver discovery.
+- DoH and DoT scanning as separate transports.
+- CIDR-range expansion and controlled resolver discovery.
+- Dedicated scan history and richer source metadata.
 - Full DNSTT and Slipstream end-to-end tunnel verification.
 - Verified ISP ownership classification.
 

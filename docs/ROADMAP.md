@@ -14,7 +14,7 @@
 - [x] Add manual paste and bulk TXT/CSV import.
 - [x] Normalize and deduplicate resolver endpoints.
 - [x] Add local search and incremental list display.
-- [ ] Preserve all source provenance when the same resolver appears in multiple sources.
+- [x] Preserve source IDs when the same resolver appears in multiple sources.
 - [ ] Add dedicated scan history and richer filters.
 
 ## Stage 2 — Collection

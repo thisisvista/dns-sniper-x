@@ -9,16 +9,18 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | Layer | Responsibility | Status |
 |---|---|---|
 | UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls |
-| Collector | Retrieve resolver candidates from configured sources | HTTPS allowlist implemented |
+| Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
 | Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
-| Storage | Room / SQLite database | Resolver library and migration to scan-result columns |
-| Scanner | DNS transport probes | UDP and TCP query probes implemented |
+| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance (schema v3) |
+| Scanner | DNS transport probes | UDP and TCP query probes; EDNS and NXDOMAIN diagnostics |
 | Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
-| Export | Versioned formats and grouped export | Not implemented |
+| Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
 
 ## DNS probe behaviour
 
-The scanner sends a small recursive A query for `example.com` to each saved endpoint over UDP and TCP. It checks the DNS transaction ID, response bit and opcode, and records separate status and latency for each transport. A maximum of 100 entries are processed per run, with at most 8 resolver probes active concurrently and a 1.8 second socket timeout.
+The scanner sends a small recursive A query for `example.com` to each saved endpoint over UDP and TCP. It checks the DNS transaction ID, response bit and opcode, and verifies that the response echoes the expected question. UDP and TCP results, latency, and last-tested time are stored separately.
+
+Scanning is processed in batches of up to 500 saved entries, with at most 8 resolvers active concurrently and a 1.8 second socket timeout per network operation. Completed results are persisted as scanning progresses. Pause/resume continues with remaining untested entries.
 
 The test runs through Android's currently active network route. Results may differ between mobile operators, Wi-Fi networks, locations and times. The probe does not perform broad address-range scanning.
 
@@ -30,9 +32,13 @@ A valid DNS response proves only DNS reachability on that transport. It does not
 2. **Tunnel compatibility:** requires additional protocol-specific checks; not implemented yet.
 3. **End-to-end success:** requires a real client and controlled test server; not implemented yet.
 
+## Resolver source provenance
+
+Resolver identity is the normalized address plus port. When the same endpoint is found in multiple collector sources, the primary source and additional source IDs are retained rather than inserting duplicate rows. Source URLs, retrieval timestamps, and license/terms metadata are not yet persisted per resolver.
+
 ## Database migration
 
-Schema version 2 adds independent UDP and TCP status/latency columns while retaining the original aggregate fields. Existing version 1 user databases are migrated in place.
+Schema version 3 adds the `additionalSources` field while retaining the existing UDP/TCP outcomes. Existing version 2 databases are migrated in place; the earlier version 1 to version 2 migration remains registered.
 
 ## Safety and network behaviour
 
