@@ -150,10 +150,13 @@ internal object DnsPacket {
             require(dataStart + dataLength <= packet.size) { "Truncated DNS record data" }
             if (index < answers && recordClass == 1) {
                 when (type) {
-                    queryType -> {
-                        if (type == 1) require(dataLength == 4) { "Invalid A record length" }
-                        if (type == 28) require(dataLength == 16) { "Invalid AAAA record length" }
-                        hasRelevantAnswer = true
+                    1 -> {
+                        require(dataLength == 4) { "Invalid A record length" }
+                        if (queryType == 1) hasRelevantAnswer = true
+                    }
+                    28 -> {
+                        require(dataLength == 16) { "Invalid AAAA record length" }
+                        if (queryType == 28) hasRelevantAnswer = true
                     }
                     5 -> {
                         val cname = readName(packet, dataStart, knownLabelOffsets)
