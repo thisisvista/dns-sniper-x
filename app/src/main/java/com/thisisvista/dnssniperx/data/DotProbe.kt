@@ -4,6 +4,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -28,7 +31,10 @@ object DotProbe {
     private const val MAX_RESPONSE_BYTES = 4_096
 
     suspend fun testAll(): List<DotProbeResult> = withContext(Dispatchers.IO) {
-        providers.map { test(it) }
+        coroutineScope {
+            // Four built-in providers can be checked concurrently; awaitAll preserves display order.
+            providers.map { provider -> async { test(provider) } }.awaitAll()
+        }
     }
 
     private fun test(provider: DotProvider): DotProbeResult {
