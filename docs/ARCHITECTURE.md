@@ -2,68 +2,54 @@
 
 ## Product boundary
 
-DNS SniperX is an independent Android application. SlipNet is a possible destination for exported resolver results; DNS SniperX does not depend on SlipNet being installed.
+DNS SniperX is an independent Android application. SlipNet is a possible destination for exported resolver results; it is not a runtime dependency.
 
 ## Layers
 
-| Layer | Responsibility | Status |
-|---|---|---|
-| UI | Compose screens, progress, result details | Local import, public collection and UDP/TCP scan controls; separate DoH/DoT diagnostics and histories |
-| Collector | Retrieve resolver candidates from configured sources | Reviewed HTTPS source list; endpoint deduplication and source-ID merging |
-| Domain | Resolver model, parsing and test outcomes | Endpoint parser and per-transport outcomes |
-| Storage | Room / SQLite database | Resolver library, per-transport outcomes, source provenance, scan history, DoH history, and DoT history (schema v6) |
-| Scanner | DNS transport probes | UDP/TCP resolver probes; separate RFC 8484 DoH and DNS-over-TLS checks for four fixed public providers each; EDNS and NXDOMAIN diagnostics |
-| Tunnel tests | Real DNSTT / Slipstream end-to-end checks | Not implemented; Android client feasibility must be verified |
-| Export | Versioned formats and grouped export | Endpoint TXT export implemented; SlipNet parser compatibility unverified |
+| Layer | Responsibility |
+|---|---|
+| UI | Compose screens, progress, resolver list, filters, histories and controls |
+| Collector | Reviewed public HTTPS source downloads, parsing, deduplication and provenance |
+| Domain | Resolver endpoint model, parser and per-transport outcomes |
+| Storage | Room database: resolver library, source provenance, scan history, DoH history and DoT history (schema v6) |
+| Scanner | UDP/TCP DNS probes, EDNS/NXDOMAIN diagnostics, separate DoH and DoT checks |
+| Tunnel tests | Real DNSTT/Slipstream end-to-end checks; not implemented |
+| Export | Resolver TXT export; SlipNet import compatibility still requires verification |
+
+## Public source collection
+
+The collector currently uses four reviewed public lists: a regional Iran list, Public DNS Info, Trickest resolvers, and a global public DNS directory. Sources are fetched concurrently; the regional source is processed first so its provenance is retained when duplicate endpoints are merged.
+
+The collector accepts HTTPS URLs only from the explicit host allowlist `public-dns.info` and `raw.githubusercontent.com`. Automatic redirects are disabled. Each redirect is resolved and validated against the same HTTPS, hostname, default-port, and no-user-info policy before another request is made. Redirects are limited to three hops. This prevents a reviewed source from redirecting collection traffic to an arbitrary host or downgrading to HTTP.
+
+Downloads use bounded connect/read timeouts and per-source character and line limits. Parsing and endpoint validation occur before candidates are returned to storage. Failed sources are reported independently; one unavailable source does not prevent the others from being processed.
+
+## Resolver identity and provenance
+
+A resolver endpoint is identified by normalized address plus port. Duplicate discoveries merge source IDs into the existing record rather than creating duplicate rows. The regional list is ordered first to preserve useful regional provenance. The database currently stores source IDs, but not the original source URL, retrieval timestamp, or source license/terms notes per record.
 
 ## DNS probe behaviour
 
-The scanner sends a small recursive A query for `example.com` to each saved endpoint over UDP and TCP. It checks the DNS transaction ID, response bit and opcode, and verifies that the response echoes the expected question. UDP and TCP results, latency, and last-tested time are stored separately.
+The scanner sends a recursive A query for `example.com` over UDP and TCP independently. It validates transaction identity and the returned question. Results and latency are stored separately by transport. Scans are processed in batches of up to 500 entries, with at most eight active resolvers and a bounded socket timeout. Results are persisted as scanning progresses and the scan can be paused and resumed.
 
-Scanning is processed in batches of up to 500 saved entries, with at most 8 resolvers active concurrently and a 1.8 second socket timeout per network operation. Completed results are persisted as scanning progresses. Pause/resume continues with remaining untested entries.
+A valid DNS response proves reachability for that transport only. It does not prove censorship circumvention, tunnel delegation, EDNS compatibility, or DNSTT/Slipstream end-to-end support.
 
-The test runs through Android's currently active network route. Results may differ between mobile operators, Wi-Fi networks, locations and times. The probe does not perform broad address-range scanning.
+## DoH and DoT
 
-A valid DNS response proves only DNS reachability on that transport. It does not establish tunnel delegation, EDNS compatibility, DNSTT/Slipstream support, or end-to-end connectivity.
+DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT checks use TLS on port 853 with hostname verification and the platform trust store. These diagnostics and their histories are separate from ordinary UDP/TCP resolver results; neither is an end-to-end tunnel test.
 
-## DNS-over-HTTPS diagnostics
+## Storage and migrations
 
-The DoH diagnostic sends a DNS wire-format query to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard HTTPS endpoints using POST with `application/dns-message`. It validates the returned DNS transaction and question using the same packet validator as UDP/TCP. HTTPS certificate and hostname verification use the platform defaults; redirects are not followed. DoH outcomes are displayed separately and stored in a dedicated local history table (latest 100 records), not as ordinary IP resolver results. This is a connectivity diagnostic, not a tunnel-compatibility test.
+Room schema version 6 contains resolver records, scan history, DoH history, and DoT history. Registered migrations cover versions 1→2 through 5→6. Histories are stored locally.
 
-## DNS-over-TLS diagnostics
+## Offline behaviour
 
-The DoT diagnostic connects to a fixed allowlist of Cloudflare, Google, Quad9, and AdGuard hostnames on TCP port 853. It enables TLS hostname verification, relies on the platform trust store, sends a length-prefixed DNS wire query, and validates the DNS transaction and question. DoT results are kept separate from UDP/TCP resolver outcomes. The latest 100 checks are stored locally in a dedicated history table and shown separately in the dashboard. This is a transport reachability check, not a tunnel-compatibility test.
+Offline mode can display the locally stored resolver library and prior results. Discovering new public resolvers or validating live network reachability requires internet connectivity.
 
-## Result meanings
+## Network and privacy boundaries
 
-1. **DNS reachability:** a valid response to the test DNS question was received.
-2. **Tunnel compatibility:** requires additional protocol-specific checks; not implemented yet.
-3. **End-to-end success:** requires a real client and controlled test server; not implemented yet.
-
-## Scan history
-
-Each completed resolver probe appends a local history row containing the endpoint, test timestamp, UDP/TCP outcomes and latencies, and whether it was part of a first scan or retry. The database retains the latest 100 records in the history query; the dashboard displays the latest 30. History is stored locally and is not exported or synchronized.
-
-## DoH and DoT history
-
-DoH and DoT provider checks are stored in separate local tables, independently of ordinary UDP/TCP resolver results. Each history query retains the latest 100 records and the dashboard displays recent checks. These records are not exported or synchronized.
-
-## Resolver list filtering
-
-The saved resolver list can be filtered by overall working state, UDP or TCP success, untested entries, warnings, and individual failure outcomes (timeout, DNS error, no answer, truncated, or failed). Network type and user-assigned provider labels can be combined with text search; sorting can prioritize the fastest successful transport.
-
-## Resolver source provenance
-
-Resolver identity is the normalized address plus port. When the same endpoint is found in multiple collector sources, the primary source and additional source IDs are retained rather than inserting duplicate rows. Source URLs, retrieval timestamps, and license/terms metadata are not yet persisted per resolver.
-
-## Database migration
-
-Schema version 6 includes resolver scan history, a separate DoH history table, and a separate DoT history table. Migrations 1→2, 2→3, 3→4, 4→5, and 5→6 are registered so existing databases upgrade in place.
-
-## Safety and network behaviour
-
-- Use public lists, user-provided imports, and sources whose terms permit collection.
-- Apply concurrency limits, timeouts, and rate limits.
-- Do not perform broad, indiscriminate IP-range scans.
-- A scan result applies only to the network on which it was tested.
-- Offline mode allows browsing the local library; it cannot discover new external resolvers or prove external connectivity without a route.
+- Collection is limited to reviewed public sources and user-provided imports.
+- Source URLs and redirect targets are validated against a fixed HTTPS host allowlist.
+- Downloads, concurrency, and response sizes are bounded.
+- User-assigned ISP labels are descriptive labels, not verified network ownership.
+- A scan result applies only to the network and time at which it was measured.

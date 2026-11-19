@@ -1,6 +1,7 @@
 package com.thisisvista.dnssniperx.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,5 +16,15 @@ class ResolverCollectorTest {
 
     @Test fun regionalSourceIsPrioritizedForProvenance() {
         assertEquals("iran-public-dns-directory", ResolverCollector.sources.first().id)
+    }
+
+    @Test fun sourceUrlPolicyAllowsOnlyReviewedHttpsHosts() {
+        assertTrue(ResolverCollector.isAllowedSourceUrl("https://public-dns.info/nameservers.csv"))
+        assertTrue(ResolverCollector.isAllowedSourceUrl("https://raw.githubusercontent.com/example/list.txt"))
+        assertFalse(ResolverCollector.isAllowedSourceUrl("http://raw.githubusercontent.com/example/list.txt"))
+        assertFalse(ResolverCollector.isAllowedSourceUrl("https://evil.example/list.txt"))
+        assertFalse(ResolverCollector.isAllowedSourceUrl("https://raw.githubusercontent.com.evil.example/list.txt"))
+        assertFalse(ResolverCollector.isAllowedSourceUrl("https://user@raw.githubusercontent.com/example/list.txt"))
+        assertFalse(ResolverCollector.isAllowedSourceUrl("https://raw.githubusercontent.com:8443/example/list.txt"))
     }
 }

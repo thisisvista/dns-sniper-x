@@ -2,63 +2,51 @@
 
 ## Stage 0 — Repository and Android foundation
 
-- [x] Create the independent GitHub repository.
-- [x] Add the initial Android Gradle project structure.
+- [x] Create the independent Android project and GitHub repository.
 - [ ] Add and verify the Gradle wrapper.
-- [x] Run Android builds in CI and fix build issues.
+- [x] Run Android builds and unit tests in CI.
 
 ## Stage 1 — Resolver data foundation
 
-- [x] Define and validate resolver endpoints (IPv4, IPv6, hostnames, and optional ports).
-- [x] Add Room / SQLite persistence and a migration strategy (schema v6 includes scan, DoH, and DoT history).
-- [x] Add manual paste and bulk TXT/CSV import.
-- [x] Normalize and deduplicate resolver endpoints.
-- [x] Add local search and incremental list display.
-- [x] Preserve source IDs when the same resolver appears in multiple sources.
-- [x] Add a persistent recent scan history (latest 100 records; latest 30 shown in the dashboard).
-- [x] Add result filters for working, per-transport success, untested, warnings, timeout, DNS error, no answer, truncated, and failed outcomes.
+- [x] Parse and validate IPv4, IPv6, hostname, and optional-port resolver entries.
+- [x] Persist resolver records and scan outcomes with Room (schema v6).
+- [x] Import large TXT files in automatic batches of 500 with pause/resume.
+- [x] Normalize and deduplicate endpoints while merging source provenance.
+- [x] Search, sort, filter, and incrementally display the local resolver library.
+- [x] Keep scan, DoH, and DoT histories locally.
 
-## Stage 2 — Collection
+## Stage 2 — Public source collection
 
-- [x] Collect candidates from reviewed public HTTPS sources, including a regional Iran list.
-- [x] Add download size/time limits, syntax validation, and deduplication.
-- [x] Report source download errors.
-- [ ] Make source adapters configurable.
-- [ ] Record source URL, retrieval time, and license/terms notes for each source.
+- [x] Collect from reviewed public HTTPS lists, including a regional Iran list.
+- [x] Bound connection/read time, response characters, and lines per source.
+- [x] Restrict source URLs and every redirect target to the reviewed HTTPS host allowlist.
+- [x] Fetch independent sources concurrently and report per-source failures.
+- [ ] Make source adapters configurable without weakening URL policy.
+- [ ] Persist source URL, retrieval time, and license/terms notes.
 
 ## Stage 3 — DNS diagnostics
 
-- [x] Implement independent UDP and TCP DNS probes.
-- [x] Add timeouts, bounded concurrency, cancellation/pause-resume, and latency measurements.
-- [x] Add basic NXDOMAIN and EDNS payload diagnostics.
-- [x] Confirm unexpected .invalid answers with a second random name before warning.
-- [x] Add RFC 8484 DoH diagnostics for a fixed set of public HTTPS providers; keep results separate from UDP/TCP resolver tests.
-- [ ] Add configurable DoH endpoints.
-- [x] Persist DoH provider results locally (latest 100 records).
-- [x] Add DoT diagnostics as a separate TLS transport on port 853 with hostname verification.
-- [x] Persist DoT provider results locally (latest 100 records).
-- [ ] Complete real-device testing on Wi-Fi and mobile networks.
+- [x] Independent UDP and TCP DNS probes with bounded concurrency and timeout.
+- [x] EDNS and NXDOMAIN anomaly diagnostics.
+- [x] Separate DoH and DoT connectivity diagnostics and persistent histories.
+- [ ] Complete real-device tests on Wi-Fi and mobile networks.
 
 ## Stage 4 — Tunnel compatibility
 
-- [ ] Audit Findns source packages and dependencies without copying its code.
-- [ ] Evaluate DNSTT client availability on Android ARM64.
-- [ ] Evaluate Slipstream client build and runtime feasibility on Android.
-- [ ] Build controlled end-to-end tests only when a valid test server and required credentials/certificates are available.
-- [ ] Never report basic DNS success as tunnel success.
+- [ ] Evaluate Android DNSTT client feasibility.
+- [ ] Evaluate Android Slipstream client feasibility.
+- [ ] Implement controlled end-to-end checks only with a valid test server and required credentials/certificates.
+- [ ] Never infer tunnel success from ordinary DNS reachability.
 
-## Stage 5 — Export and usability
+## Stage 5 — Export and interoperability
 
-- [x] Export resolvers with at least one successful UDP/TCP test, preserving non-default ports and IPv6 formatting.
-- [ ] Confirm SlipNet's accepted import format from its source/documentation.
-- [ ] Add grouped export with validation and a clear compatibility label.
-- [ ] Add share/save actions and export history.
-- [ ] Test imports in SlipNet on real devices.
+- [x] Export successful resolver endpoints with non-default ports and IPv6 formatting.
+- [ ] Verify SlipNet's accepted import format against its source/documentation.
+- [ ] Add validated grouped export and test imports on real devices.
 
 ## Stage 6 — Release readiness
 
-- [x] Add automated unit tests and a CI debug-APK build.
-- [ ] Add instrumentation tests.
-- [ ] Test on a range of Android versions and device memory sizes.
-- [ ] Add privacy and network-use disclosures.
-- [ ] Produce signed release builds and publish release notes.
+- [x] Automated unit tests and debug APK CI artifact.
+- [ ] Instrumentation and real-device tests.
+- [ ] Privacy/network-use disclosures.
+- [ ] Signed release build and release notes.

@@ -24,6 +24,8 @@ object ResolverCollector {
     private const val READ_TIMEOUT_MS = 15_000
     private const val MAX_LINES_PER_SOURCE = 25_000
     private const val MAX_CHARS_PER_SOURCE = 4_000_000
+    private const val MAX_REDIRECTS = 3
+    private val allowedSourceHosts = setOf("public-dns.info", "raw.githubusercontent.com")
 
     // Regional entries are listed first so their regional provenance is retained
     // when the same resolver also appears in a global source.
@@ -49,6 +51,14 @@ object ResolverCollector {
             "Global public DNS directory"
         )
     )
+
+    internal fun isAllowedSourceUrl(address: String): Boolean = runCatching {
+        val url = URL(address)
+        url.protocol.equals("https", ignoreCase = true) &&
+            url.host.lowercase() in allowedSourceHosts &&
+            (url.port == -1 || url.port == 443) &&
+            url.userInfo == null
+    }.getOrDefault(false)
 
     suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
         withContext(Dispatchers.IO) {
@@ -94,32 +104,53 @@ object ResolverCollector {
         }
 
     private fun download(address: String): String {
-        val connection = (URL(address).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "DNS-SniperX/0.3 Android")
-            setRequestProperty("Accept", "text/plain,text/csv,*/*")
-        }
+        require(isAllowedSourceUrl(address)) { "Source URL is not on the HTTPS allowlist" }
+        var currentUrl = address
 
-        try {
-            val status = connection.responseCode
-            if (status !in 200..299) error("HTTP $status")
-
-            val builder = StringBuilder()
-            BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
-                var lineCount = 0
-                while (lineCount < MAX_LINES_PER_SOURCE) {
-                    val line = reader.readLine() ?: break
-                    if (builder.length + line.length > MAX_CHARS_PER_SOURCE) error("Source exceeded the size limit")
-                    builder.append(line).append('\n')
-                    lineCount++
-                }
+        for (redirectCount in 0..MAX_REDIRECTS) {
+            val connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", "DNS-SniperX/0.3 Android")
+                setRequestProperty("Accept", "text/plain,text/csv,*/*")
             }
-            return builder.toString()
-        } finally {
-            connection.disconnect()
+
+            try {
+                val status = connection.responseCode
+                if (status in 200..299) {
+                    val builder = StringBuilder()
+                    BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
+                        var lineCount = 0
+                        while (lineCount < MAX_LINES_PER_SOURCE) {
+                            val line = reader.readLine() ?: break
+                            if (builder.length + line.length > MAX_CHARS_PER_SOURCE) {
+                                error("Source exceeded the size limit")
+                            }
+                            builder.append(line).append('\n')
+                            lineCount++
+                        }
+                    }
+                    return builder.toString()
+                }
+
+                if (status in 300..399) {
+                    if (redirectCount == MAX_REDIRECTS) error("Too many source redirects")
+                    val location = connection.getHeaderField("Location")
+                        ?: error("Redirect response did not include a location")
+                    val redirectedUrl = URL(URL(currentUrl), location).toString()
+                    require(isAllowedSourceUrl(redirectedUrl)) {
+                        "Source redirect target is not on the HTTPS allowlist"
+                    }
+                    currentUrl = redirectedUrl
+                } else {
+                    error("HTTP $status")
+                }
+            } finally {
+                connection.disconnect()
+            }
         }
+        error("Unable to download source")
     }
 }
