@@ -34,10 +34,19 @@ class AndroidKeystoreTunnelSecretStore(context: Context) : TunnelSecretStore {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         cipher.updateAAD(associatedData(profileId, secretName))
-        val packed = cipher.iv + cipher.doFinal(secret)
-        preferences.edit()
-            .putString(storageKey(profileId, secretName), Base64.encodeToString(packed, Base64.NO_WRAP))
-            .apply()
+        val encrypted = cipher.doFinal(secret)
+        try {
+            val packed = cipher.iv + encrypted
+            try {
+                preferences.edit()
+                    .putString(storageKey(profileId, secretName), Base64.encodeToString(packed, Base64.NO_WRAP))
+                    .apply()
+            } finally {
+                packed.fill(0)
+            }
+        } finally {
+            encrypted.fill(0)
+        }
     }
 
     @Synchronized
@@ -49,13 +58,22 @@ class AndroidKeystoreTunnelSecretStore(context: Context) : TunnelSecretStore {
         } catch (error: IllegalArgumentException) {
             throw IllegalStateException("Stored tunnel secret is corrupted", error)
         }
-        require(packed.size > IV_LENGTH) { "Stored tunnel secret is corrupted" }
-        val iv = packed.copyOfRange(0, IV_LENGTH)
-        val ciphertext = packed.copyOfRange(IV_LENGTH, packed.size)
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_LENGTH_BITS, iv))
-        cipher.updateAAD(associatedData(profileId, secretName))
-        return cipher.doFinal(ciphertext)
+        try {
+            require(packed.size > IV_LENGTH) { "Stored tunnel secret is corrupted" }
+            val iv = packed.copyOfRange(0, IV_LENGTH)
+            val ciphertext = packed.copyOfRange(IV_LENGTH, packed.size)
+            try {
+                val cipher = Cipher.getInstance(TRANSFORMATION)
+                cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_LENGTH_BITS, iv))
+                cipher.updateAAD(associatedData(profileId, secretName))
+                return cipher.doFinal(ciphertext)
+            } finally {
+                iv.fill(0)
+                ciphertext.fill(0)
+            }
+        } finally {
+            packed.fill(0)
+        }
     }
 
     @Synchronized
