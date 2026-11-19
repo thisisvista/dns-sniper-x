@@ -6,52 +6,52 @@ import org.junit.Test
 
 class ResolverListParserTest {
     @Test fun parsesIpv4AndCustomPort() {
-        val result = ResolverListParser.parse("1.1.1.1\\n8.8.8.8:5353")
+        val result = ResolverListParser.parse("1.1.1.1\n8.8.8.8:5353")
         assertEquals(2, result.size)
         assertEquals(53, result[0].port)
         assertEquals(5353, result[1].port)
     }
 
     @Test fun parsesBracketedIpv6AndHostname() {
-        val result = ResolverListParser.parse("[2001:db8::1]:5353\\nresolver.example")
+        val result = ResolverListParser.parse("[2001:db8::1]:5353\nresolver.example")
         assertEquals(2, result.size)
         assertEquals(5353, result[0].port)
         assertEquals("resolver.example", result[1].address)
     }
 
     @Test fun rejectsMalformedIpv6Addresses() {
-        val result = ResolverListParser.parse("[::::]:53\\n[1:2:3]:53\\n2001:db8::1")
+        val result = ResolverListParser.parse("[::::]:53\n[1:2:3]:53\n2001:db8::1")
         assertEquals(listOf("2001:db8::1"), result.map { it.address })
     }
 
     @Test fun rejectsInvalidPortsForIpv4AndIpv6Endpoints() {
         val result = ResolverListParser.parse(
-            "1.1.1.1:0\\n1.1.1.1:65536\\n1.1.1.1:not-a-port\\n" +
-                "[2001:db8::1]:0\\n[2001:db8::1]:65536\\n[2001:db8::1]:abc"
+            "1.1.1.1:0\n1.1.1.1:65536\n1.1.1.1:not-a-port\n" +
+                "[2001:db8::1]:0\n[2001:db8::1]:65536\n[2001:db8::1]:abc"
         )
         assertTrue(result.isEmpty())
     }
 
     @Test fun ignoresCommentsInvalidEntriesAndDuplicates() {
-        val result = ResolverListParser.parse("# public list\\n1.1.1.1\\n1.1.1.1\\n999.1.1.1\\nnot a server")
+        val result = ResolverListParser.parse("# public list\n1.1.1.1\n1.1.1.1\n999.1.1.1\nnot a server")
         assertEquals(1, result.size)
         assertTrue(result.all { it.status == "NOT_TESTED" })
     }
 
     @Test fun parsesQuotedCsvAddressesAndUtf8Bom() {
-        val result = ResolverListParser.parse("\\uFEFF\\\"1.2.3.4\\\",53,IR\\n\\\"8.8.4.4\\\",53,US")
+        val result = ResolverListParser.parse("\uFEFF\"1.2.3.4\",53,IR\n\"8.8.4.4\",53,US")
         assertEquals(listOf("1.2.3.4", "8.8.4.4"), result.map { it.address })
     }
 
     @Test fun ignoresCsvHeaderAndKeepsIpv6() {
-        val result = ResolverListParser.parse("ip,port,country\\n2001:4860:4860::8888,53,US")
+        val result = ResolverListParser.parse("ip,port,country\n2001:4860:4860::8888,53,US")
         assertEquals(1, result.size)
         assertEquals("2001:4860:4860::8888", result.single().address)
     }
 
     @Test fun parsesCustomPortsFromCsvForIpv4AndIpv6() {
         val result = ResolverListParser.parse(
-            "1.2.3.4,5353,IR\\n2001:4860:4860::8888,5354,US"
+            "1.2.3.4,5353,IR\n2001:4860:4860::8888,5354,US"
         )
         assertEquals(2, result.size)
         assertEquals("1.2.3.4", result[0].address)
@@ -61,14 +61,14 @@ class ResolverListParserTest {
     }
 
     @Test fun defaultsCsvPortTo53WhenSecondColumnIsCountryCode() {
-        val result = ResolverListParser.parse("1.2.3.4,IR\\n2001:4860:4860::8888,US")
+        val result = ResolverListParser.parse("1.2.3.4,IR\n2001:4860:4860::8888,US")
         assertEquals(2, result.size)
         assertTrue(result.all { it.port == 53 })
     }
 
     @Test fun rejectsInvalidNumericCsvPorts() {
         val result = ResolverListParser.parse(
-            "1.2.3.4,0,IR\\n8.8.8.8,65536,US"
+            "1.2.3.4,0,IR\n8.8.8.8,65536,US"
         )
         assertTrue(result.isEmpty())
     }
