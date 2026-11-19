@@ -18,10 +18,16 @@ interface ResolverDao {
                 ELSE 3
             END ASC,
             CASE
-                WHEN udpLatencyMs IS NULL THEN tcpLatencyMs
-                WHEN tcpLatencyMs IS NULL THEN udpLatencyMs
-                WHEN udpLatencyMs < tcpLatencyMs THEN udpLatencyMs
-                ELSE tcpLatencyMs
+                WHEN udpStatus = 'PASS' AND tcpStatus = 'PASS' THEN
+                    CASE
+                        WHEN udpLatencyMs IS NULL THEN tcpLatencyMs
+                        WHEN tcpLatencyMs IS NULL THEN udpLatencyMs
+                        WHEN udpLatencyMs < tcpLatencyMs THEN udpLatencyMs
+                        ELSE tcpLatencyMs
+                    END
+                WHEN udpStatus = 'PASS' THEN udpLatencyMs
+                WHEN tcpStatus = 'PASS' THEN tcpLatencyMs
+                ELSE NULL
             END ASC,
             collectedAt DESC,
             address ASC
