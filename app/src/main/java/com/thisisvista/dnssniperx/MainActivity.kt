@@ -31,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +57,7 @@ import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
 import com.thisisvista.dnssniperx.data.ScanHistoryEntity
 import com.thisisvista.dnssniperx.data.SourceCollectionHistoryEntity
+import com.thisisvista.dnssniperx.data.SlipNetExportFormatter
 import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
 import kotlinx.coroutines.CancellationException
@@ -398,7 +400,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     }
                     txtExportPicker.launch("dns-sniperx-working.txt")
                 }
-            },            onExportSlipNet = {
+            },
+            onExportSlipNet = {
                 val result = SlipNetExportFormatter.format(resolvers)
                 if (result.exportedCount == 0) {
                     message = "No working IPv4 DNS entries on port 53 are available for SlipNet export."
@@ -455,6 +458,7 @@ private fun HomeContent(
     onScan: (retryUnsuccessful: Boolean) -> Unit,
     onImportFile: () -> Unit,
     onExportHealthy: () -> Unit,
+    onExportSlipNet: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
