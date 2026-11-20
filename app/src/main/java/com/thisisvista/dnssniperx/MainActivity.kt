@@ -70,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.debounce
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,7 +84,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DnsSniperXApp(dao: ResolverDao) {
     var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
-    LaunchedEffect(dao) { dao.observeResolverInvalidation().collect { resolverRefreshToken++ } }
+    LaunchedEffect(dao) { dao.observeResolverInvalidation().debounce(750).collect { resolverRefreshToken++ } }
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
