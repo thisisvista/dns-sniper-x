@@ -35,7 +35,7 @@ object SlipNetExportFormatter {
         )
     }
 
-    private fun isIpv4Literal(address: String): Boolean {
+    fun isIpv4Literal(address: String): Boolean {
         val parts = address.split(".")
         if (parts.size != 4) return false
         return parts.all { part ->

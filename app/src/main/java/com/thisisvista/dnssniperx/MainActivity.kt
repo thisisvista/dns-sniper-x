@@ -39,6 +39,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +66,8 @@ import com.thisisvista.dnssniperx.data.SlipNetExportFormatter
 import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -79,15 +82,15 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun DnsSniperXApp(dao: ResolverDao) {
-    val resolvers by dao.observeAll().collectAsState(initial = emptyList())
+    var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
+    LaunchedEffect(dao) { dao.observeResolverInvalidation().collect { resolverRefreshToken++ } }
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
     val recentDotHistory by dao.observeRecentDotHistory().collectAsState(initial = emptyList())
     val recentSourceHistory by dao.observeRecentSourceCollectionHistory().collectAsState(initial = emptyList())
     var importText by rememberSaveable { mutableStateOf("") }
-    var pendingExportText by rememberSaveable { mutableStateOf("") }
-    var pendingExportSuccessMessage by rememberSaveable { mutableStateOf("") }
+    var pendingExportMode by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
     var isImporting by rememberSaveable { mutableStateOf(false) }
@@ -105,13 +108,53 @@ private fun DnsSniperXApp(dao: ResolverDao) {
         contract = ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
-                    writer.write(pendingExportText)
-                } ?: error("Could not create the selected file.")
-                message = pendingExportSuccessMessage.ifBlank { "TXT export completed." }
-            } catch (exception: Exception) {
-                message = "TXT export failed: ${exception.message ?: "Could not write file"}"
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                            val slipNet = pendingExportMode == "SLIPNET"
+                            if (!slipNet) {
+                                writer.appendLine("# DNS SniperX - working DNS resolvers")
+                                writer.appendLine("# Exported: ${java.time.Instant.now()}")
+                                writer.appendLine("# Included when UDP or TCP returned a valid DNS response.")
+                                writer.appendLine("# Sorted by fastest successful transport latency.")
+                            }
+                            var offset = 0
+                            var exported = 0
+                            var skipped = 0
+                            val seenAddresses = HashSet<String>()
+                            while (true) {
+                                val batch = dao.getWorkingExportBatch(limit = 500, offset = offset)
+                                if (batch.isEmpty()) break
+                                offset += batch.size
+                                for (resolver in batch) {
+                                    if (slipNet) {
+                                        if (resolver.port != 53 || !SlipNetExportFormatter.isIpv4Literal(resolver.address) ||
+                                            !seenAddresses.add(resolver.address)) {
+                                            skipped++
+                                            continue
+                                        }
+                                        writer.appendLine(resolver.address)
+                                    } else {
+                                        writer.appendLine(formatResolverEndpoint(resolver.address, resolver.port, includeDefaultPort = false))
+                                    }
+                                    exported++
+                                }
+                            }
+                            if (exported == 0) throw IllegalStateException(
+                                if (slipNet) "No working IPv4 DNS entries on port 53 are available for SlipNet export."
+                                else "No working DNS entries are available to export yet. Run a scan first."
+                            )
+                            message = if (slipNet) {
+                                "Exported $exported IPv4 resolvers for SlipNet; skipped $skipped incompatible or duplicate entries."
+                            } else {
+                                "Exported $exported working DNS entries as TXT."
+                            }
+                        } ?: error("Could not create the selected file.")
+                    }
+                } catch (exception: Exception) {
+                    message = "TXT export failed: ${exception.message ?: "Could not write file"}"
+                }
             }
         }
     }
@@ -171,7 +214,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
         HomeContent(
             contentPadding = innerPadding,
             count = count,
-            resolvers = resolvers,
+            dao = dao,
+            resolverRefreshToken = resolverRefreshToken,
             history = recentHistory,
             dohHistory = recentDohHistory,
             dotHistory = recentDotHistory,
@@ -412,36 +456,12 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             },
             onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
             onExportHealthy = {
-                val healthy = resolvers
-                    .filter { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
-                    .sortedBy { resolver ->
-                        listOfNotNull(
-                            resolver.udpLatencyMs.takeIf { resolver.udpStatus == "PASS" },
-                            resolver.tcpLatencyMs.takeIf { resolver.tcpStatus == "PASS" }
-                        ).minOrNull() ?: Long.MAX_VALUE
-                    }
-                if (healthy.isEmpty()) {
-                    message = "No working DNS entries are available to export yet. Run a scan first."
-                } else {
-                    pendingExportText = buildString {
-                        appendLine("# DNS SniperX - working DNS resolvers")
-                        appendLine("# Exported: ${java.time.Instant.now()}")
-                        appendLine("# A resolver is included when UDP or TCP returned a valid DNS response.")
-                        appendLine("# Sorted by the fastest successful transport latency; entries without latency are last.")
-                        healthy.forEach { appendLine(formatResolverEndpoint(it.address, it.port, includeDefaultPort = false)) }
-                    }
-                    txtExportPicker.launch("dns-sniperx-working.txt")
-                }
+                pendingExportMode = "HEALTHY"
+                txtExportPicker.launch("dns-sniperx-working.txt")
             },
             onExportSlipNet = {
-                val result = SlipNetExportFormatter.format(resolvers)
-                if (result.exportedCount == 0) {
-                    message = "No working IPv4 DNS entries on port 53 are available for SlipNet export."
-                } else {
-                    pendingExportText = result.text
-                    pendingExportSuccessMessage = "Exported ${result.exportedCount} IPv4 resolvers for SlipNet; skipped ${result.skippedCount} incompatible or duplicate entries."
-                    txtExportPicker.launch("dns-sniperx-slipnet-ipv4.txt")
-                }
+                pendingExportMode = "SLIPNET"
+                txtExportPicker.launch("dns-sniperx-slipnet-ipv4.txt")
             },
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
@@ -466,7 +486,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
 private fun HomeContent(
     contentPadding: PaddingValues,
     count: Int,
-    resolvers: List<ResolverEntity>,
+    dao: ResolverDao,
+    resolverRefreshToken: Int,
     history: List<ScanHistoryEntity>,
     dohHistory: List<DohHistoryEntity>,
     dotHistory: List<DotHistoryEntity>,
@@ -500,53 +521,48 @@ private fun HomeContent(
     var selectedProviderLabel by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
     var resolverSearch by rememberSaveable { mutableStateOf("") }
-    var visibleResolverLimit by rememberSaveable { mutableStateOf(100) }
-    val networkTypes = resolvers.mapNotNull { resolver ->
-        resolver.source.takeIf { it.startsWith("current-network (") }
-            ?.substringAfter("current-network (")?.substringBefore(";")
-    }.distinct().sorted()
-    val providerLabels = resolvers.mapNotNull { resolver ->
-        resolver.source.takeIf { it.startsWith("current-network (") }
-            ?.substringAfter("user label: ")?.substringBefore(")")
-    }.distinct().sorted()
-    val healthyCount = resolvers.count { it.udpStatus == "PASS" || it.tcpStatus == "PASS" }
-    val udpPassCount = resolvers.count { it.udpStatus == "PASS" }
-    val tcpPassCount = resolvers.count { it.tcpStatus == "PASS" }
-    val untestedCount = resolvers.count { it.udpStatus == "NOT_TESTED" && it.tcpStatus == "NOT_TESTED" }
-    val warningCount = resolvers.count { it.note?.contains("WARNING:", ignoreCase = true) == true }
-    val filteredResolvers = resolvers.filter { resolver ->
-        val networkType = resolver.source.takeIf { it.startsWith("current-network (") }
-            ?.substringAfter("current-network (")?.substringBefore(";")
-        val providerLabel = resolver.source.takeIf { it.startsWith("current-network (") }
-            ?.substringAfter("user label: ")?.substringBefore(")")
-        val sourceMatches = (selectedNetworkType == "ALL" || networkType == selectedNetworkType) &&
-            (selectedProviderLabel == "ALL" || providerLabel == selectedProviderLabel)
-        val searchMatches = resolverSearch.isBlank() ||
-            resolver.address.contains(resolverSearch.trim(), ignoreCase = true) ||
-            resolver.port.toString() == resolverSearch.trim() ||
-            resolver.source.contains(resolverSearch.trim(), ignoreCase = true) ||
-            resolver.note?.contains(resolverSearch.trim(), ignoreCase = true) == true
-        val statusMatches = when (selectedFilter) {
-            "WORKING" -> resolver.udpStatus == "PASS" || resolver.tcpStatus == "PASS"
-            "UDP" -> resolver.udpStatus == "PASS"
-            "TCP" -> resolver.tcpStatus == "PASS"
-            "UNTESTED" -> resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
-            "WARNINGS" -> resolver.note?.contains("WARNING:", ignoreCase = true) == true
-            "TIMEOUT" -> resolver.udpStatus == "TIMEOUT" || resolver.tcpStatus == "TIMEOUT"
-            "DNS_ERROR" -> resolver.udpStatus == "DNS_ERROR" || resolver.tcpStatus == "DNS_ERROR"
-            "NO_ANSWER" -> resolver.udpStatus == "NO_ANSWER" || resolver.tcpStatus == "NO_ANSWER"
-            "TRUNCATED" -> resolver.udpStatus == "TRUNCATED" || resolver.tcpStatus == "TRUNCATED"
-            "FAIL" -> resolver.udpStatus == "FAIL" || resolver.tcpStatus == "FAIL"
-            else -> true
+    var resolvers by androidx.compose.runtime.remember { mutableStateOf(emptyList<ResolverEntity>()) }
+    var matchingCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var networkTypes by androidx.compose.runtime.remember { mutableStateOf(emptyList<String>()) }
+    var providerLabels by androidx.compose.runtime.remember { mutableStateOf(emptyList<String>()) }
+    var healthyCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var udpPassCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var tcpPassCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var untestedCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var warningCount by androidx.compose.runtime.remember { mutableStateOf(0) }
+    var isLoadingResolvers by androidx.compose.runtime.remember { mutableStateOf(false) }
+    val pageSize = 100
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
+        isLoadingResolvers = true
+        resolvers = emptyList()
+        try {
+            resolvers = dao.getResolverPage(
+                statusFilter = selectedFilter,
+                searchTerm = resolverSearch.trim(),
+                networkType = selectedNetworkType,
+                providerLabel = selectedProviderLabel,
+                fastestFirst = fastestFirst,
+                limit = pageSize,
+                offset = 0
+            )
+            matchingCount = dao.countResolverMatches(
+                statusFilter = selectedFilter,
+                searchTerm = resolverSearch.trim(),
+                networkType = selectedNetworkType,
+                providerLabel = selectedProviderLabel
+            )
+            networkTypes = dao.getNetworkTypeFilters()
+            providerLabels = dao.getProviderLabelFilters()
+            healthyCount = dao.countHealthyResolvers()
+            udpPassCount = dao.countUdpPassResolvers()
+            tcpPassCount = dao.countTcpPassResolvers()
+            untestedCount = dao.countUntestedResolvers()
+            warningCount = dao.countWarningResolvers()
+        } finally {
+            isLoadingResolvers = false
         }
-        sourceMatches && statusMatches && searchMatches
-    }.let { list ->
-        if (fastestFirst) list.sortedBy { item ->
-            listOfNotNull(
-                item.udpLatencyMs.takeIf { item.udpStatus == "PASS" },
-                item.tcpLatencyMs.takeIf { item.tcpStatus == "PASS" }
-            ).minOrNull() ?: Long.MAX_VALUE
-        } else list
     }
     Column(
         modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
@@ -797,13 +813,13 @@ private fun HomeContent(
             }
         }
         FilterChip(selected = fastestFirst, onClick = { fastestFirst = !fastestFirst }, label = { Text(if (fastestFirst) "Fastest first" else "Best overall first") })
-        Text("${filteredResolvers.size} matching DNS entries", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (resolvers.isEmpty()) {
+        Text("${matchingCount} matching DNS entries", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (count == 0) {
             Text("No DNS addresses saved yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (filteredResolvers.isEmpty()) {
+        } else if (matchingCount == 0) {
             Text("No DNS entries match this filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            filteredResolvers.take(visibleResolverLimit).forEach { resolver ->
+            resolvers.forEach { resolver ->
                 val sourceDescription = if (resolver.source.startsWith("current-network (")) {
                     val networkType = resolver.source.substringAfter("current-network (").substringBefore(";")
                     val providerLabel = resolver.source.substringAfter("user label: ", "Unspecified").substringBefore(")")
@@ -842,11 +858,28 @@ private fun HomeContent(
                     }
                 }
             }
-            if (filteredResolvers.size > visibleResolverLimit) {
-                Text("Showing ${visibleResolverLimit} of ${filteredResolvers.size} matching entries.", style = MaterialTheme.typography.bodySmall)
+            if (isLoadingResolvers) {
+                CircularProgressIndicator(modifier = Modifier.height(22.dp), strokeWidth = 2.dp)
+            }
+            if (resolvers.size < matchingCount) {
+                Text("Showing ${resolvers.size} of ${matchingCount} matching entries.", style = MaterialTheme.typography.bodySmall)
                 Button(
-                    onClick = { visibleResolverLimit += 100 },
-                    modifier = Modifier.fillMaxWidth()
+                    onClick = {
+                        scope.launch {
+                            val nextPage = dao.getResolverPage(
+                                statusFilter = selectedFilter,
+                                searchTerm = resolverSearch.trim(),
+                                networkType = selectedNetworkType,
+                                providerLabel = selectedProviderLabel,
+                                fastestFirst = fastestFirst,
+                                limit = pageSize,
+                                offset = resolvers.size
+                            )
+                            resolvers = resolvers + nextPage
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoadingResolvers
                 ) {
                     Text("Show 100 more DNS entries")
                 }

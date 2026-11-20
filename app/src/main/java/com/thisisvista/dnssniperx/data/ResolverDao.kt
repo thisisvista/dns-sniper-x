@@ -50,6 +50,30 @@ interface ResolverDao {
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeCount(): Flow<Int>
 
+    /** Emits whenever any resolver row is inserted, deleted, or updated. */
+    @Query("SELECT COUNT(*) FROM resolvers")
+    fun observeResolverInvalidation(): Flow<Int>
+
+    @Query("""
+        SELECT * FROM resolvers
+        WHERE udpStatus = 'PASS' OR tcpStatus = 'PASS'
+        ORDER BY
+            CASE
+                WHEN udpStatus = 'PASS' AND tcpStatus = 'PASS' THEN
+                    CASE WHEN udpLatencyMs IS NULL THEN tcpLatencyMs
+                         WHEN tcpLatencyMs IS NULL THEN udpLatencyMs
+                         WHEN udpLatencyMs < tcpLatencyMs THEN udpLatencyMs
+                         ELSE tcpLatencyMs END
+                WHEN udpStatus = 'PASS' THEN udpLatencyMs
+                WHEN tcpStatus = 'PASS' THEN tcpLatencyMs
+                ELSE 9223372036854775807
+            END ASC,
+            collectedAt DESC,
+            address ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getWorkingExportBatch(limit: Int, offset: Int): List<ResolverEntity>
+
     /**
      * Loads a bounded resolver window. Filtering is performed by SQLite so the UI
      * never needs to collect the complete resolver table into memory.
