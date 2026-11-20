@@ -42,16 +42,17 @@ jobs:
           # the emulator's supported TCG software-acceleration fallback.
           ANDROID_I_WANT_MY_TCG: "yes"
         with:
-          api-level: 35
+          # Use the lighter API 34 / Pixel 2 image for more reliable TCG runs.
+          api-level: 34
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           emulator-boot-timeout: 1200
           # Keep the action's software-acceleration mode; TCG is enabled above.
           disable-linux-hardware-acceleration: true
-          # Skip the optional animation command, which can fail on slow boots.
-          disable-animations: false
+          # Reduce emulator load during instrumentation startup.
+          disable-animations: true
           # The action waits for sys.boot_completed before running this command.
           script: gradle connectedDebugAndroidTest
 
