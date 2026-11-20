@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,6 +59,44 @@ class TunnelProfileRepositoryTest {
             secretStore.deleteProfile(profileId)
             database.close()
             privateCredential.fill(0)
+        }
+    }
+
+
+    @Test
+    fun observeProfilesEmitsValidPersistedProfilesAndSkipsUnknownProtocols() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, ResolverDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        val repository = TunnelProfileRepository(database.resolverDao(), InMemoryTunnelSecretStore())
+        val validProfile = TunnelProfile(
+            id = "observed-${UUID.randomUUID()}",
+            name = "Observed Slipstream",
+            protocol = TunnelProtocol.SLIPSTREAM,
+            serverHost = "slip.example",
+            serverPort = 443,
+            slipstreamTlsServerName = "slip.example"
+        )
+
+        try {
+            repository.saveProfile(validProfile)
+            database.resolverDao().saveTunnelProfile(
+                TunnelProfileEntity(
+                    id = "future-${UUID.randomUUID()}",
+                    name = "Future protocol",
+                    protocol = "FUTURE_PROTOCOL",
+                    serverHost = "future.example",
+                    serverPort = 443,
+                    dnsttServerPublicKey = null,
+                    slipstreamTlsServerName = null
+                )
+            )
+
+            val observed = repository.observeProfiles().kotlinx.coroutines.flow.first()
+            assertEquals(listOf(validProfile), observed)
+        } finally {
+            database.close()
         }
     }
 
