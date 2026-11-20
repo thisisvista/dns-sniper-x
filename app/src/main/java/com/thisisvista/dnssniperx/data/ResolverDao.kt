@@ -86,6 +86,36 @@ interface ResolverDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(resolvers: List<ResolverEntity>): List<Long>
 
+    @Query("""
+        SELECT COUNT(*) FROM resolvers
+        WHERE (
+            (:retryUnsuccessful = 0 AND udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED')
+            OR
+            (:retryUnsuccessful = 1 AND
+                (udpStatus != 'NOT_TESTED' OR tcpStatus != 'NOT_TESTED') AND
+                (udpStatus != 'PASS' OR tcpStatus != 'PASS' OR COALESCE(note, '') LIKE '%WARNING:%'))
+        )
+    """)
+    suspend fun countPendingScan(retryUnsuccessful: Boolean): Int
+
+    @Query("""
+        SELECT * FROM resolvers
+        WHERE id > :afterId AND (
+            (:retryUnsuccessful = 0 AND udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED')
+            OR
+            (:retryUnsuccessful = 1 AND
+                (udpStatus != 'NOT_TESTED' OR tcpStatus != 'NOT_TESTED') AND
+                (udpStatus != 'PASS' OR tcpStatus != 'PASS' OR COALESCE(note, '') LIKE '%WARNING:%'))
+        )
+        ORDER BY id ASC
+        LIMIT :limit
+    """)
+    suspend fun getPendingScanBatch(
+        retryUnsuccessful: Boolean,
+        afterId: Long,
+        limit: Int
+    ): List<ResolverEntity>
+
     @Query("UPDATE resolvers SET udpStatus = :udpStatus, udpLatencyMs = :udpLatencyMs, tcpStatus = :tcpStatus, tcpLatencyMs = :tcpLatencyMs, lastTestedAt = :testedAt, status = :overallStatus, latencyMs = :bestLatency, note = :note WHERE id = :id")
     suspend fun updateScanResult(
         id: Long,

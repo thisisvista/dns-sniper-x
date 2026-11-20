@@ -299,107 +299,113 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     scanJob?.cancel()
                     message = "Pause requested. The current batch will stop; completed batches are already saved."
                 } else {
-                    val pending = resolvers.filter { resolver ->
-                        if (!retryUnsuccessful) {
-                            resolver.udpStatus == "NOT_TESTED" && resolver.tcpStatus == "NOT_TESTED"
+                    scope.launch {
+                        val total = dao.countPendingScan(retryUnsuccessful)
+                        if (total == 0) {
+                            message = if (retryUnsuccessful) {
+                                "No previously tested DNS entries need a retry."
+                            } else {
+                                "No untested DNS entries remain. Use Retry unsuccessful / warnings to test them again."
+                            }
                         } else {
-                            val alreadyTested = resolver.udpStatus != "NOT_TESTED" || resolver.tcpStatus != "NOT_TESTED"
-                            val needsRetry = resolver.udpStatus != "PASS" || resolver.tcpStatus != "PASS" ||
-                                resolver.note?.contains("WARNING:", ignoreCase = true) == true
-                            alreadyTested && needsRetry
-                        }
-                    }
-                    if (pending.isEmpty()) {
-                        message = if (retryUnsuccessful) {
-                            "No previously tested DNS entries need a retry."
-                        } else {
-                            "No untested DNS entries remain. Use Retry unsuccessful / warnings to test them again."
-                        }
-                    } else {
-                        scanJob = scope.launch {
-                            isScanning = true
-                            var completed = 0
-                            scanProgress = "0 / ${pending.size}"
-                            try {
-                                var pausedForThermal = false
-                                for ((batchIndex, batch) in pending.chunked(ScanResourcePolicy.MAX_SCAN_BATCH_SIZE).withIndex()) {
-                                    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                                    val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                                    val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                                        .takeIf { it in 0..100 } ?: 100
-                                    val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        powerManager.currentThermalStatus
-                                    } else {
-                                        PowerManager.THERMAL_STATUS_NONE
-                                    }
-                                    if (ScanResourcePolicy.shouldPauseForThermal(thermalStatus)) {
-                                        pausedForThermal = true
-                                        message = "Scan paused automatically because the device is critically hot. Let it cool, then resume."
-                                        break
-                                    }
-                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) / ScanResourcePolicy.MAX_SCAN_BATCH_SIZE}…"
-                                    val scanParallelism = ScanResourcePolicy.recommendedParallelism(
-                                        thermalStatus = thermalStatus,
-                                        batteryPercent = batteryPercent,
-                                        powerSaveMode = powerManager.isPowerSaveMode
-                                    )
-                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) / ScanResourcePolicy.MAX_SCAN_BATCH_SIZE}… (parallelism $scanParallelism)"
-                                    DnsProbe.scan(batch, parallelism = scanParallelism) { result ->
-                                        // Only a valid DNS response counts as a working transport.
-                                        // DNS errors and timeouts may have timings, but must not
-                                        // become the saved "best working latency".
-                                        val best = listOfNotNull(
-                                            result.udp.latencyMs.takeIf { result.udp.status == "PASS" },
-                                            result.tcp.latencyMs.takeIf { result.tcp.status == "PASS" }
-                                        ).minOrNull()
-                                        val overall = when {
-                                            result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
-                                            result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
-                                            else -> "FAILED"
-                                        }
-                                        val notes = DnsProbe.buildDiagnosticNote(
-                                            result.udp.detail,
-                                            result.tcp.detail
+                            scanJob = scope.launch {
+                                isScanning = true
+                                var completed = 0
+                                var lastId = 0L
+                                scanProgress = "0 / $total"
+                                try {
+                                    var pausedForThermal = false
+                                    var batchIndex = 0
+                                    while (true) {
+                                        val batch = dao.getPendingScanBatch(
+                                            retryUnsuccessful = retryUnsuccessful,
+                                            afterId = lastId,
+                                            limit = ScanResourcePolicy.MAX_SCAN_BATCH_SIZE
                                         )
-                                        val historyResolver = batch.firstOrNull { it.id == result.resolverId }
-                                        dao.insertHistory(
-                                            ScanHistoryEntity(
-                                                resolverAddress = historyResolver?.address ?: "Unknown",
-                                                resolverPort = historyResolver?.port ?: 53,
-                                                testedAt = System.currentTimeMillis(),
+                                        if (batch.isEmpty()) break
+                                        lastId = batch.last().id
+                                        batchIndex += 1
+
+                                        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                                        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                                        val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                                            .takeIf { it in 0..100 } ?: 100
+                                        val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                            powerManager.currentThermalStatus
+                                        } else {
+                                            PowerManager.THERMAL_STATUS_NONE
+                                        }
+                                        if (ScanResourcePolicy.shouldPauseForThermal(thermalStatus)) {
+                                            pausedForThermal = true
+                                            message = "Scan paused automatically because the device is critically hot. Let it cool, then resume."
+                                            break
+                                        }
+
+                                        val scanParallelism = ScanResourcePolicy.recommendedParallelism(
+                                            thermalStatus = thermalStatus,
+                                            batteryPercent = batteryPercent,
+                                            powerSaveMode = powerManager.isPowerSaveMode
+                                        )
+                                        val totalBatches = (total + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) /
+                                            ScanResourcePolicy.MAX_SCAN_BATCH_SIZE
+                                        message = "Scanning batch $batchIndex of $totalBatches… (parallelism $scanParallelism)"
+                                        DnsProbe.scan(batch, parallelism = scanParallelism) { result ->
+                                            // Only a valid DNS response counts as a working transport.
+                                            // DNS errors and timeouts may have timings, but must not
+                                            // become the saved "best working latency".
+                                            val best = listOfNotNull(
+                                                result.udp.latencyMs.takeIf { result.udp.status == "PASS" },
+                                                result.tcp.latencyMs.takeIf { result.tcp.status == "PASS" }
+                                            ).minOrNull()
+                                            val overall = when {
+                                                result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
+                                                result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
+                                                else -> "FAILED"
+                                            }
+                                            val notes = DnsProbe.buildDiagnosticNote(
+                                                result.udp.detail,
+                                                result.tcp.detail
+                                            )
+                                            val historyResolver = batch.firstOrNull { it.id == result.resolverId }
+                                            dao.insertHistory(
+                                                ScanHistoryEntity(
+                                                    resolverAddress = historyResolver?.address ?: "Unknown",
+                                                    resolverPort = historyResolver?.port ?: 53,
+                                                    testedAt = System.currentTimeMillis(),
+                                                    udpStatus = result.udp.status,
+                                                    udpLatencyMs = result.udp.latencyMs,
+                                                    tcpStatus = result.tcp.status,
+                                                    tcpLatencyMs = result.tcp.latencyMs,
+                                                    scanMode = if (retryUnsuccessful) "RETRY" else "SCAN"
+                                                )
+                                            )
+                                            dao.updateScanResult(
+                                                id = result.resolverId,
                                                 udpStatus = result.udp.status,
                                                 udpLatencyMs = result.udp.latencyMs,
                                                 tcpStatus = result.tcp.status,
                                                 tcpLatencyMs = result.tcp.latencyMs,
-                                                scanMode = if (retryUnsuccessful) "RETRY" else "SCAN"
+                                                testedAt = System.currentTimeMillis(),
+                                                overallStatus = overall,
+                                                bestLatency = best,
+                                                note = notes
                                             )
-                                        )
-                                        dao.updateScanResult(
-                                            id = result.resolverId,
-                                            udpStatus = result.udp.status,
-                                            udpLatencyMs = result.udp.latencyMs,
-                                            tcpStatus = result.tcp.status,
-                                            tcpLatencyMs = result.tcp.latencyMs,
-                                            testedAt = System.currentTimeMillis(),
-                                            overallStatus = overall,
-                                            bestLatency = best,
-                                            note = notes
-                                        )
-                                        completed += 1
-                                        scanProgress = "$completed / ${pending.size}"
+                                            completed += 1
+                                            scanProgress = "$completed / $total"
+                                        }
                                     }
+                                    if (!pausedForThermal) {
+                                        message = "Scan complete: $completed DNS entries tested and saved."
+                                    }
+                                } catch (cancelled: CancellationException) {
+                                    message = "Scan paused. Completed batches were saved; press Resume to continue."
+                                    throw cancelled
+                                } catch (exception: Exception) {
+                                    message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry."
+                                } finally {
+                                    isScanning = false
+                                    scanJob = null
                                 }
-                                if (!pausedForThermal) {
-                                    message = "Scan complete: $completed DNS entries tested and saved."
-                                }
-                            } catch (cancelled: CancellationException) {
-                                message = "Scan paused. Completed batches were saved; press Resume to continue."
-                                throw cancelled
-                            } catch (exception: Exception) {
-                                message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry."
-                            } finally {
-                                isScanning = false
-                                scanJob = null
                             }
                         }
                     }
