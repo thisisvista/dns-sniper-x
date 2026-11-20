@@ -24,18 +24,23 @@ object TunnelProfileMapper {
         existing: TunnelProfileEntity? = null,
         now: Long = System.currentTimeMillis()
     ): TunnelProfileEntity {
-        require(profile.isValid()) { profile.validate().joinToString("; ") }
-        require(existing == null || existing.id == profile.id) {
+        // Normalize user-entered surrounding whitespace before validating host/name fields.
+        val normalized = profile.copy(
+            name = profile.name.trim(),
+            serverHost = profile.serverHost.trim()
+        )
+        require(normalized.isValid()) { normalized.validate().joinToString("; ") }
+        require(existing == null || existing.id == normalized.id) {
             "Existing profile ID does not match"
         }
         return TunnelProfileEntity(
-            id = profile.id,
-            name = profile.name.trim(),
-            protocol = profile.protocol.name,
-            serverHost = profile.serverHost.trim(),
-            serverPort = profile.serverPort,
-            dnsttServerPublicKey = profile.dnsttServerPublicKey,
-            slipstreamTlsServerName = profile.slipstreamTlsServerName,
+            id = normalized.id,
+            name = normalized.name,
+            protocol = normalized.protocol.name,
+            serverHost = normalized.serverHost,
+            serverPort = normalized.serverPort,
+            dnsttServerPublicKey = normalized.dnsttServerPublicKey,
+            slipstreamTlsServerName = normalized.slipstreamTlsServerName,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now
         )
