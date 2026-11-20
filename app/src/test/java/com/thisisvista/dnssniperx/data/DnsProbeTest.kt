@@ -4,6 +4,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DnsProbeTest {
+    @Test fun defaultScanConcurrencyIsConservative() {
+        assertTrue(DnsProbe.normalizeParallelism(4) == 4)
+    }
+
+    @Test fun fastScanConcurrencyIsCappedAtEight() {
+        assertTrue(DnsProbe.normalizeParallelism(8) == 8)
+        assertTrue(DnsProbe.normalizeParallelism(32) == 8)
+    }
+
+    @Test fun scanConcurrencyNeverFallsBelowOne() {
+        assertTrue(DnsProbe.normalizeParallelism(0) == 1)
+        assertTrue(DnsProbe.normalizeParallelism(-5) == 1)
+    }
+
     @Test fun onePositiveAnswerIsInconclusive() {
         val positive = DnsPacket.ResponseInfo("PASS", "positive", 0)
         assertTrue(DnsProbe.classifyNxDomainResponses(positive, null).contains("inconclusive"))

@@ -23,16 +23,25 @@ data class ResolverScanResult(val resolverId: Long, val udp: ProbeResult, val tc
 
 object DnsProbe {
     private const val TIMEOUT_MS = 1_800
+    private const val DEFAULT_PARALLEL_RESOLVERS = 4
     private const val MAX_PARALLEL_RESOLVERS = 8
     private const val MAX_BATCH_SIZE = 500
     private const val TEST_NAME = "example.com"
     private const val NXDOMAIN_TEST_SUFFIX = "dns-sniperx-check.invalid"
 
+    /**
+     * Scans at a conservative default concurrency. Callers may request a faster
+     * mode, but the engine never exceeds the hard safety cap.
+     */
+    internal fun normalizeParallelism(requested: Int): Int =
+        requested.coerceIn(1, MAX_PARALLEL_RESOLVERS)
+
     suspend fun scan(
         resolvers: List<ResolverEntity>,
+        parallelism: Int = DEFAULT_PARALLEL_RESOLVERS,
         onResult: suspend (ResolverScanResult) -> Unit
     ) = withContext(Dispatchers.IO) {
-        val semaphore = Semaphore(MAX_PARALLEL_RESOLVERS)
+        val semaphore = Semaphore(normalizeParallelism(parallelism))
         coroutineScope {
             resolvers.take(MAX_BATCH_SIZE).map { resolver ->
                 async {
