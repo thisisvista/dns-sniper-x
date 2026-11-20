@@ -50,6 +50,132 @@ interface ResolverDao {
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeCount(): Flow<Int>
 
+    /**
+     * Loads a bounded resolver window. Filtering is performed by SQLite so the UI
+     * never needs to collect the complete resolver table into memory.
+     */
+    @Query("""
+        SELECT * FROM resolvers
+        WHERE
+            (:statusFilter = 'ALL'
+                OR (:statusFilter = 'WORKING' AND (udpStatus = 'PASS' OR tcpStatus = 'PASS'))
+                OR (:statusFilter = 'UDP' AND udpStatus = 'PASS')
+                OR (:statusFilter = 'TCP' AND tcpStatus = 'PASS')
+                OR (:statusFilter = 'UNTESTED' AND udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED')
+                OR (:statusFilter = 'WARNINGS' AND COALESCE(note, '') LIKE '%WARNING:%')
+                OR (:statusFilter = 'TIMEOUT' AND (udpStatus = 'TIMEOUT' OR tcpStatus = 'TIMEOUT'))
+                OR (:statusFilter = 'DNS_ERROR' AND (udpStatus = 'DNS_ERROR' OR tcpStatus = 'DNS_ERROR'))
+                OR (:statusFilter = 'NO_ANSWER' AND (udpStatus = 'NO_ANSWER' OR tcpStatus = 'NO_ANSWER'))
+                OR (:statusFilter = 'TRUNCATED' AND (udpStatus = 'TRUNCATED' OR tcpStatus = 'TRUNCATED'))
+                OR (:statusFilter = 'FAIL' AND (udpStatus = 'FAIL' OR tcpStatus = 'FAIL')))
+            AND (:networkType = 'ALL' OR source LIKE 'current-network (' || :networkType || ';%')
+            AND (:providerLabel = 'ALL' OR instr(source, '; user label: ' || :providerLabel || ')') > 0)
+            AND (
+                :searchTerm = '' OR
+                lower(address) LIKE '%' || lower(:searchTerm) || '%' OR
+                CAST(port AS TEXT) = :searchTerm OR
+                lower(source) LIKE '%' || lower(:searchTerm) || '%' OR
+                lower(COALESCE(note, '')) LIKE '%' || lower(:searchTerm) || '%'
+            )
+        ORDER BY
+            CASE WHEN :fastestFirst = 1 THEN
+                CASE
+                    WHEN udpStatus = 'PASS' AND tcpStatus = 'PASS' THEN
+                        CASE WHEN udpLatencyMs IS NULL THEN tcpLatencyMs
+                             WHEN tcpLatencyMs IS NULL THEN udpLatencyMs
+                             WHEN udpLatencyMs < tcpLatencyMs THEN udpLatencyMs
+                             ELSE tcpLatencyMs END
+                    WHEN udpStatus = 'PASS' THEN udpLatencyMs
+                    WHEN tcpStatus = 'PASS' THEN tcpLatencyMs
+                    ELSE 9223372036854775807
+                END
+            ELSE 0 END ASC,
+            CASE
+                WHEN udpStatus = 'PASS' AND tcpStatus = 'PASS' THEN 0
+                WHEN udpStatus = 'PASS' OR tcpStatus = 'PASS' THEN 1
+                WHEN udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED' THEN 2
+                ELSE 3
+            END ASC,
+            collectedAt DESC,
+            address ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getResolverPage(
+        statusFilter: String,
+        searchTerm: String,
+        networkType: String,
+        providerLabel: String,
+        fastestFirst: Boolean,
+        limit: Int,
+        offset: Int
+    ): List<ResolverEntity>
+
+    @Query("""
+        SELECT COUNT(*) FROM resolvers
+        WHERE
+            (:statusFilter = 'ALL'
+                OR (:statusFilter = 'WORKING' AND (udpStatus = 'PASS' OR tcpStatus = 'PASS'))
+                OR (:statusFilter = 'UDP' AND udpStatus = 'PASS')
+                OR (:statusFilter = 'TCP' AND tcpStatus = 'PASS')
+                OR (:statusFilter = 'UNTESTED' AND udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED')
+                OR (:statusFilter = 'WARNINGS' AND COALESCE(note, '') LIKE '%WARNING:%')
+                OR (:statusFilter = 'TIMEOUT' AND (udpStatus = 'TIMEOUT' OR tcpStatus = 'TIMEOUT'))
+                OR (:statusFilter = 'DNS_ERROR' AND (udpStatus = 'DNS_ERROR' OR tcpStatus = 'DNS_ERROR'))
+                OR (:statusFilter = 'NO_ANSWER' AND (udpStatus = 'NO_ANSWER' OR tcpStatus = 'NO_ANSWER'))
+                OR (:statusFilter = 'TRUNCATED' AND (udpStatus = 'TRUNCATED' OR tcpStatus = 'TRUNCATED'))
+                OR (:statusFilter = 'FAIL' AND (udpStatus = 'FAIL' OR tcpStatus = 'FAIL')))
+            AND (:networkType = 'ALL' OR source LIKE 'current-network (' || :networkType || ';%')
+            AND (:providerLabel = 'ALL' OR instr(source, '; user label: ' || :providerLabel || ')') > 0)
+            AND (
+                :searchTerm = '' OR
+                lower(address) LIKE '%' || lower(:searchTerm) || '%' OR
+                CAST(port AS TEXT) = :searchTerm OR
+                lower(source) LIKE '%' || lower(:searchTerm) || '%' OR
+                lower(COALESCE(note, '')) LIKE '%' || lower(:searchTerm) || '%'
+            )
+    """)
+    suspend fun countResolverMatches(
+        statusFilter: String,
+        searchTerm: String,
+        networkType: String,
+        providerLabel: String
+    ): Int
+
+    @Query("""
+        SELECT DISTINCT
+            substr(source, length('current-network (') + 1,
+                instr(source, ';') - length('current-network (') - 1)
+        FROM resolvers
+        WHERE source LIKE 'current-network (%'
+        ORDER BY 1
+    """)
+    suspend fun getNetworkTypeFilters(): List<String>
+
+    @Query("""
+        SELECT DISTINCT
+            substr(source, instr(source, '; user label: ') + length('; user label: '),
+                length(source) - instr(source, '; user label: ') - length('; user label: '))
+        FROM resolvers
+        WHERE instr(source, '; user label: ') > 0
+        ORDER BY 1
+    """)
+    suspend fun getProviderLabelFilters(): List<String>
+
+    @Query("SELECT COUNT(*) FROM resolvers WHERE udpStatus = 'PASS' OR tcpStatus = 'PASS'")
+    suspend fun countHealthyResolvers(): Int
+
+    @Query("SELECT COUNT(*) FROM resolvers WHERE udpStatus = 'PASS'")
+    suspend fun countUdpPassResolvers(): Int
+
+    @Query("SELECT COUNT(*) FROM resolvers WHERE tcpStatus = 'PASS'")
+    suspend fun countTcpPassResolvers(): Int
+
+    @Query("SELECT COUNT(*) FROM resolvers WHERE udpStatus = 'NOT_TESTED' AND tcpStatus = 'NOT_TESTED'")
+    suspend fun countUntestedResolvers(): Int
+
+    @Query("SELECT COUNT(*) FROM resolvers WHERE COALESCE(note, '') LIKE '%WARNING:%'")
+    suspend fun countWarningResolvers(): Int
+
     @Query("SELECT * FROM scan_history ORDER BY testedAt DESC, id DESC LIMIT 100")
     fun observeRecentHistory(): Flow<List<ScanHistoryEntity>>
 
