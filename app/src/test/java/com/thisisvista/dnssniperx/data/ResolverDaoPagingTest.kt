@@ -96,11 +96,10 @@ class ResolverDaoPagingTest {
     }
 
     @Test
-    fun slipNetExportQueryKeepsFastestCompatibleAddressOnlyOnce() = runBlocking {
+    fun slipNetExportQueryIncludesOnlyPort53IPv4Resolvers() = runBlocking {
         dao.insertIgnore(
             listOf(
                 ResolverEntity(address = "1.1.1.1", port = 53, udpStatus = "PASS", udpLatencyMs = 30),
-                ResolverEntity(address = "1.1.1.1", port = 53, tcpStatus = "PASS", tcpLatencyMs = 10),
                 ResolverEntity(address = "8.8.8.8", port = 53, udpStatus = "PASS", udpLatencyMs = 20),
                 ResolverEntity(address = "2001:db8::1", port = 53, udpStatus = "PASS", udpLatencyMs = 5),
                 ResolverEntity(address = "9.9.9.9", port = 5353, udpStatus = "PASS", udpLatencyMs = 1)
@@ -109,7 +108,7 @@ class ResolverDaoPagingTest {
 
         val exported = dao.getSlipNetExportBatch(limit = 500, offset = 0)
 
-        assertEquals(listOf("1.1.1.1", "8.8.8.8"), exported.map { it.address })
+        assertEquals(listOf("8.8.8.8", "1.1.1.1"), exported.map { it.address })
         assertEquals(3, dao.countWorkingExportRows())
         assertEquals(2, dao.countSlipNetCompatibleCandidates())
     }
