@@ -123,18 +123,21 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             var offset = 0
                             var exported = 0
                             var skipped = 0
-                            val seenAddresses = HashSet<String>()
+                            if (slipNet) {
+                                val workingCount = dao.countWorkingExportRows()
+                                val compatibleCount = dao.countSlipNetCompatibleCandidates()
+                                skipped = workingCount - compatibleCount
+                            }
                             while (true) {
-                                val batch = dao.getWorkingExportBatch(limit = 500, offset = offset)
+                                val batch = if (slipNet) {
+                                    dao.getSlipNetExportBatch(limit = 500, offset = offset)
+                                } else {
+                                    dao.getWorkingExportBatch(limit = 500, offset = offset)
+                                }
                                 if (batch.isEmpty()) break
                                 offset += batch.size
                                 for (resolver in batch) {
                                     if (slipNet) {
-                                        if (resolver.port != 53 || !SlipNetExportFormatter.isIpv4Literal(resolver.address) ||
-                                            !seenAddresses.add(resolver.address)) {
-                                            skipped++
-                                            continue
-                                        }
                                         writer.appendLine(resolver.address)
                                     } else {
                                         writer.appendLine(formatResolverEndpoint(resolver.address, resolver.port, includeDefaultPort = false))

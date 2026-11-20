@@ -54,6 +54,105 @@ interface ResolverDao {
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeResolverInvalidation(): Flow<Int>
 
+    /**
+     * Returns one best compatible IPv4 resolver per address. Duplicate selection
+     * happens in SQLite, avoiding an unbounded in-memory address set during export.
+     */
+    @Query("""
+        SELECT candidate.* FROM resolvers AS candidate
+        WHERE candidate.port = 53
+          AND (candidate.udpStatus = 'PASS' OR candidate.tcpStatus = 'PASS')
+          AND (
+              (length(candidate.address) - length(replace(candidate.address, '.', ''))) = 3
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM resolvers AS better
+              WHERE better.address = candidate.address
+                AND better.port = 53
+                AND (better.udpStatus = 'PASS' OR better.tcpStatus = 'PASS')
+                AND (
+                    CASE
+                        WHEN better.udpStatus = 'PASS' AND better.tcpStatus = 'PASS' THEN
+                            CASE WHEN better.udpLatencyMs IS NULL THEN better.tcpLatencyMs
+                                 WHEN better.tcpLatencyMs IS NULL THEN better.udpLatencyMs
+                                 WHEN better.udpLatencyMs < better.tcpLatencyMs THEN better.udpLatencyMs
+                                 ELSE better.tcpLatencyMs END
+                        WHEN better.udpStatus = 'PASS' THEN better.udpLatencyMs
+                        WHEN better.tcpStatus = 'PASS' THEN better.tcpLatencyMs
+                        ELSE 9223372036854775807
+                    END
+                    <
+                    CASE
+                        WHEN candidate.udpStatus = 'PASS' AND candidate.tcpStatus = 'PASS' THEN
+                            CASE WHEN candidate.udpLatencyMs IS NULL THEN candidate.tcpLatencyMs
+                                 WHEN candidate.tcpLatencyMs IS NULL THEN candidate.udpLatencyMs
+                                 WHEN candidate.udpLatencyMs < candidate.tcpLatencyMs THEN candidate.udpLatencyMs
+                                 ELSE candidate.tcpLatencyMs END
+                        WHEN candidate.udpStatus = 'PASS' THEN candidate.udpLatencyMs
+                        WHEN candidate.tcpStatus = 'PASS' THEN candidate.tcpLatencyMs
+                        ELSE 9223372036854775807
+                    END
+                    OR (
+                        CASE
+                            WHEN better.udpStatus = 'PASS' AND better.tcpStatus = 'PASS' THEN
+                                CASE WHEN better.udpLatencyMs IS NULL THEN better.tcpLatencyMs
+                                     WHEN better.tcpLatencyMs IS NULL THEN better.udpLatencyMs
+                                     WHEN better.udpLatencyMs < better.tcpLatencyMs THEN better.udpLatencyMs
+                                     ELSE better.tcpLatencyMs END
+                            WHEN better.udpStatus = 'PASS' THEN better.udpLatencyMs
+                            WHEN better.tcpStatus = 'PASS' THEN better.tcpLatencyMs
+                            ELSE 9223372036854775807
+                        END
+                        =
+                        CASE
+                            WHEN candidate.udpStatus = 'PASS' AND candidate.tcpStatus = 'PASS' THEN
+                                CASE WHEN candidate.udpLatencyMs IS NULL THEN candidate.tcpLatencyMs
+                                     WHEN candidate.tcpLatencyMs IS NULL THEN candidate.udpLatencyMs
+                                     WHEN candidate.udpLatencyMs < candidate.tcpLatencyMs THEN candidate.udpLatencyMs
+                                     ELSE candidate.tcpLatencyMs END
+                            WHEN candidate.udpStatus = 'PASS' THEN candidate.udpLatencyMs
+                            WHEN candidate.tcpStatus = 'PASS' THEN candidate.tcpLatencyMs
+                            ELSE 9223372036854775807
+                        END
+                        AND better.id < candidate.id
+                    )
+                )
+          )
+        ORDER BY
+            CASE
+                WHEN candidate.udpStatus = 'PASS' AND candidate.tcpStatus = 'PASS' THEN
+                    CASE WHEN candidate.udpLatencyMs IS NULL THEN candidate.tcpLatencyMs
+                         WHEN candidate.tcpLatencyMs IS NULL THEN candidate.udpLatencyMs
+                         WHEN candidate.udpLatencyMs < candidate.tcpLatencyMs THEN candidate.udpLatencyMs
+                         ELSE candidate.tcpLatencyMs END
+                WHEN candidate.udpStatus = 'PASS' THEN candidate.udpLatencyMs
+                WHEN candidate.tcpStatus = 'PASS' THEN candidate.tcpLatencyMs
+                ELSE 9223372036854775807
+            END ASC,
+            candidate.collectedAt DESC,
+            candidate.address ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getSlipNetExportBatch(limit: Int, offset: Int): List<ResolverEntity>
+
+    @Query("""
+        SELECT COUNT(*) FROM resolvers
+        WHERE udpStatus = 'PASS' OR tcpStatus = 'PASS'
+    """)
+    suspend fun countWorkingExportRows(): Int
+
+    @Query("""
+        SELECT COUNT(DISTINCT address) FROM resolvers
+        WHERE port = 53
+          AND (udpStatus = 'PASS' OR tcpStatus = 'PASS')
+          AND (length(address) - length(replace(address, '.', ''))) = 3
+          AND address NOT GLOB '*[^0-9.]*'
+          AND address NOT LIKE '.%'
+          AND address NOT LIKE '%.'
+          AND address NOT LIKE '%..%'
+    """)
+    suspend fun countSlipNetCompatibleCandidates(): Int
+
     @Query("""
         SELECT * FROM resolvers
         WHERE udpStatus = 'PASS' OR tcpStatus = 'PASS'
