@@ -13,7 +13,7 @@ class TunnelProfileMapperTest {
             protocol = TunnelProtocol.DNSTT,
             serverHost = " tunnel.example ",
             serverPort = 5300,
-            dnsttServerPublicKey = "public-noise-key"
+            dnsttServerPublicKey = "  public-noise-key  "
         )
 
         val entity = TunnelProfileMapper.toEntity(profile, now = 100L)
@@ -21,11 +21,30 @@ class TunnelProfileMapperTest {
 
         assertEquals("Home DNSTT", entity.name)
         assertEquals("tunnel.example", entity.serverHost)
+        assertEquals("public-noise-key", entity.dnsttServerPublicKey)
         assertEquals("DNSTT", entity.protocol)
         assertEquals(100L, entity.createdAt)
         assertEquals(100L, entity.updatedAt)
         assertEquals(profile.id, restored?.id)
-        assertEquals(profile.dnsttServerPublicKey, restored?.dnsttServerPublicKey)
+        assertEquals("public-noise-key", restored?.dnsttServerPublicKey)
+    }
+
+    @Test fun normalizesSlipstreamTlsServerNameBeforeValidationAndPersistence() {
+        val profile = TunnelProfile(
+            id = "profile-slipstream",
+            name = "Slipstream",
+            protocol = TunnelProtocol.SLIPSTREAM,
+            serverHost = " edge.example ",
+            serverPort = 443,
+            slipstreamTlsServerName = " edge.example "
+        )
+
+        val entity = TunnelProfileMapper.toEntity(profile)
+        val restored = TunnelProfileMapper.toModel(entity)
+
+        assertEquals("edge.example", entity.serverHost)
+        assertEquals("edge.example", entity.slipstreamTlsServerName)
+        assertEquals("edge.example", restored?.slipstreamTlsServerName)
     }
 
     @Test fun updatePreservesCreationTimeAndAdvancesUpdateTime() {

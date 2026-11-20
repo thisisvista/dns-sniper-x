@@ -24,10 +24,12 @@ object TunnelProfileMapper {
         existing: TunnelProfileEntity? = null,
         now: Long = System.currentTimeMillis()
     ): TunnelProfileEntity {
-        // Normalize user-entered surrounding whitespace before validating host/name fields.
+        // Normalize user-entered surrounding whitespace before validating or persisting fields.
         val normalized = profile.copy(
             name = profile.name.trim(),
-            serverHost = profile.serverHost.trim()
+            serverHost = profile.serverHost.trim(),
+            dnsttServerPublicKey = profile.dnsttServerPublicKey?.trim(),
+            slipstreamTlsServerName = profile.slipstreamTlsServerName?.trim()
         )
         require(normalized.isValid()) { normalized.validate().joinToString("; ") }
         require(existing == null || existing.id == normalized.id) {
