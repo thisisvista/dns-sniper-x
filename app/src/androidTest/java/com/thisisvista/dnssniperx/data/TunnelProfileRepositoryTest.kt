@@ -93,7 +93,7 @@ class TunnelProfileRepositoryTest {
                 )
             )
 
-            val observed = repository.observeProfiles().kotlinx.coroutines.flow.first()
+            val observed = repository.observeProfiles().first()
             assertEquals(listOf(validProfile), observed)
         } finally {
             database.close()
