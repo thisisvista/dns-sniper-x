@@ -1,6 +1,9 @@
 package com.thisisvista.dnssniperx
 
 import android.os.Bundle
+import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -45,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.DnsProbe
+import com.thisisvista.dnssniperx.data.ScanResourcePolicy
 import com.thisisvista.dnssniperx.data.DohProbe
 import com.thisisvista.dnssniperx.data.DohProbeResult
 import com.thisisvista.dnssniperx.data.DotProbe
@@ -319,7 +323,22 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             try {
                                 pending.chunked(500).forEachIndexed { batchIndex, batch ->
                                     message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
-                                    DnsProbe.scan(batch) { result ->
+                                    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                                    val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                                    val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                                        .takeIf { it in 0..100 } ?: 100
+                                    val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                        powerManager.currentThermalStatus
+                                    } else {
+                                        PowerManager.THERMAL_STATUS_NONE
+                                    }
+                                    val scanParallelism = ScanResourcePolicy.recommendedParallelism(
+                                        thermalStatus = thermalStatus,
+                                        batteryPercent = batteryPercent,
+                                        powerSaveMode = powerManager.isPowerSaveMode
+                                    )
+                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}… (parallelism $scanParallelism)"
+                                    DnsProbe.scan(batch, parallelism = scanParallelism) { result ->
                                         // Only a valid DNS response counts as a working transport.
                                         // DNS errors and timeouts may have timings, but must not
                                         // become the saved "best working latency".
