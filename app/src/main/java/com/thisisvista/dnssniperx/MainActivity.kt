@@ -322,7 +322,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             scanProgress = "0 / ${pending.size}"
                             try {
                                 var pausedForThermal = false
-                                for ((batchIndex, batch) in pending.chunked(500).withIndex()) {
+                                for ((batchIndex, batch) in pending.chunked(ScanResourcePolicy.MAX_SCAN_BATCH_SIZE).withIndex()) {
                                     val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                                     val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                                     val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
