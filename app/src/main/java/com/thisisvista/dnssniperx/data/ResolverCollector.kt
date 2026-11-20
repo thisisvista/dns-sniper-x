@@ -1,10 +1,8 @@
 package com.thisisvista.dnssniperx.data
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -23,6 +21,7 @@ data class SourceFetchResult(
 )
 data class CollectionSummary(val results: List<SourceFetchResult>) {
     val found: Int get() = results.sumOf { it.found }
+    val inserted: Int get() = results.sumOf { it.inserted }
     val failedSources: Int get() = results.count { it.error != null }
 }
 
@@ -32,11 +31,12 @@ object ResolverCollector {
     private const val READ_TIMEOUT_MS = 15_000
     private const val MAX_LINES_PER_SOURCE = 25_000
     private const val MAX_CHARS_PER_SOURCE = 4_000_000
+    private const val MAX_LINE_CHARS = 16_384
+    const val INSERT_BATCH_SIZE = 500
     private const val MAX_REDIRECTS = 3
     private val allowedSourceHosts = setOf("public-dns.info", "raw.githubusercontent.com")
 
-    // Regional entries are listed first so their regional provenance is retained
-    // when the same resolver also appears in a global source.
+    // Regional entries are processed first so their provenance wins on duplicates.
     val sources = listOf(
         ResolverSource(
             "iran-public-dns-directory",
@@ -69,11 +69,61 @@ object ResolverCollector {
     }.getOrDefault(false)
 
     /**
-     * Reads incrementally so an oversized single line cannot be fully allocated
-     * by BufferedReader.readLine() before the response-size limit is checked.
-     * If the line cap is reached, one extra read distinguishes an exact-size
-     * response from a silently truncated oversized response.
+     * Streams source lines and persists bounded batches through [onBatch].
+     * Only one source and at most INSERT_BATCH_SIZE parsed rows are retained at a time.
      */
+    suspend fun collectAndStore(
+        onBatch: suspend (List<ResolverEntity>) -> Int,
+        onProgress: suspend (sourceName: String, found: Int, inserted: Int) -> Unit = { _, _, _ -> }
+    ): CollectionSummary = withContext(Dispatchers.IO) {
+        val results = mutableListOf<SourceFetchResult>()
+        for (source in sources) {
+            val retrievedAt = System.currentTimeMillis()
+            var found = 0
+            var inserted = 0
+            val batch = ArrayList<ResolverEntity>(INSERT_BATCH_SIZE)
+            var sourceError: String? = null
+
+            suspend fun flushBatch() {
+                if (batch.isNotEmpty()) {
+                    inserted += onBatch(batch.toList())
+                    batch.clear()
+                    onProgress(source.description, found, inserted)
+                }
+            }
+
+            try {
+                downloadLines(source.url) { line ->
+                    val parsed = ResolverListParser.parse(line, source = source.id)
+                    if (parsed.isNotEmpty()) {
+                        found += parsed.size
+                        batch.addAll(parsed)
+                        if (batch.size >= INSERT_BATCH_SIZE) flushBatch()
+                    }
+                }
+                flushBatch()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (exception: Exception) {
+                // Keep already received rows even if a source fails partway through.
+                flushBatch()
+                sourceError = exception.message?.take(160) ?: "Download failed"
+            }
+
+            results += SourceFetchResult(
+                source = source.description,
+                found = found,
+                inserted = inserted,
+                error = sourceError,
+                sourceId = source.id,
+                sourceUrl = source.url,
+                retrievedAt = retrievedAt
+            )
+        }
+        CollectionSummary(results)
+    }
+
+    /** Kept for bounded-reader unit tests and defensive compatibility. */
     internal fun readBoundedContent(
         reader: BufferedReader,
         maxChars: Int = MAX_CHARS_PER_SOURCE,
@@ -96,52 +146,7 @@ object ResolverCollector {
         return builder.toString()
     }
 
-    suspend fun downloadAndParse(): Pair<CollectionSummary, List<ResolverEntity>> =
-        withContext(Dispatchers.IO) {
-            // Fetch the reviewed sources concurrently so one slow or unreachable
-            // host does not delay every other source. awaitAll preserves source order.
-            val fetched = sources.map { source ->
-                async {
-                    try {
-                        val retrievedAt = System.currentTimeMillis()
-                        val content = download(source.url)
-                        val parsed = ResolverListParser.parse(content, source = source.id)
-                            .take(MAX_LINES_PER_SOURCE)
-                        SourceFetchResult(source.description, parsed.size, 0, sourceId = source.id, sourceUrl = source.url, retrievedAt = retrievedAt) to parsed
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (exception: Exception) {
-                        SourceFetchResult(
-                            source.description, 0, 0,
-                            exception.message?.take(160) ?: "Download failed",
-                            sourceId = source.id, sourceUrl = source.url
-                        ) to emptyList()
-                    }
-                }
-            }.awaitAll()
-
-            val results = fetched.map { it.first }
-            val entriesByEndpoint = linkedMapOf<Pair<String, Int>, ResolverEntity>()
-            fetched.flatMap { it.second }.forEach { entry ->
-                val key = entry.address.lowercase() to entry.port
-                val existing = entriesByEndpoint[key]
-                if (existing == null) {
-                    entriesByEndpoint[key] = entry
-                } else {
-                    val mergedSources = (existing.additionalSources.lineSequence() +
-                        sequenceOf(entry.source) +
-                        entry.additionalSources.lineSequence())
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() && it != existing.source }
-                        .distinct()
-                        .toList()
-                    entriesByEndpoint[key] = existing.copy(additionalSources = mergedSources.joinToString("\n"))
-                }
-            }
-            CollectionSummary(results) to entriesByEndpoint.values.toList()
-        }
-
-    private fun download(address: String): String {
+    private suspend fun downloadLines(address: String, onLine: suspend (String) -> Unit) {
         require(isAllowedSourceUrl(address)) { "Source URL is not on the HTTPS allowlist" }
         var currentUrl = address
 
@@ -159,8 +164,9 @@ object ResolverCollector {
                 val status = connection.responseCode
                 if (status in 200..299) {
                     BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
-                        return readBoundedContent(reader)
+                        streamBoundedLines(reader, onLine)
                     }
+                    return
                 }
 
                 if (status in 300..399) {
@@ -180,5 +186,37 @@ object ResolverCollector {
             }
         }
         error("Unable to download source")
+    }
+
+    private suspend fun streamBoundedLines(
+        reader: BufferedReader,
+        onLine: suspend (String) -> Unit
+    ) {
+        val line = StringBuilder()
+        var totalChars = 0
+        var lineCount = 0
+        while (true) {
+            val next = reader.read()
+            if (next == -1) {
+                if (line.isNotEmpty()) {
+                    lineCount++
+                    if (lineCount > MAX_LINES_PER_SOURCE) error("Source exceeded the line limit")
+                    onLine(line.toString())
+                }
+                break
+            }
+            totalChars++
+            if (totalChars > MAX_CHARS_PER_SOURCE) error("Source exceeded the size limit")
+            val character = next.toChar()
+            if (character == '\n') {
+                lineCount++
+                if (lineCount > MAX_LINES_PER_SOURCE) error("Source exceeded the line limit")
+                onLine(line.toString())
+                line.setLength(0)
+            } else {
+                if (line.length >= MAX_LINE_CHARS) error("Source line exceeded the size limit")
+                line.append(character)
+            }
+        }
     }
 }

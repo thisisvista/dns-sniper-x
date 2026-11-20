@@ -261,9 +261,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 if (!isCollecting && !isImporting) {
                     scope.launch {
                         isCollecting = true
-                        message = "Downloading public resolver lists…"
+                        message = "Streaming public resolver lists in small batches…"
                         try {
-                            val (summary, entries) = ResolverCollector.downloadAndParse()
+                            val summary = ResolverCollector.collectAndStore(
+                                onBatch = { batch -> dao.insertOrMergeSources(batch) },
+                                onProgress = { sourceName, found, inserted ->
+                                    message = "$sourceName: received $found candidates; saved $inserted new entries…"
+                                }
+                            )
                             dao.saveSourceCollectionHistory(summary.results.map { result ->
                                 SourceCollectionHistoryEntity(
                                     sourceId = result.sourceId,
@@ -275,16 +280,15 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     termsNote = null
                                 )
                             })
-                            val inserted = if (entries.isEmpty()) 0 else dao.insertOrMergeSources(entries)
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
                                 if (result.error == null) "${result.source}: ${result.found}" else "${result.source}: unavailable"
                             }
                             message = buildString {
-                                append("Found ${summary.found} candidates; saved ${inserted} new DNS entries.")
+                                append("Found ${summary.found} candidates; saved ${summary.inserted} new DNS entries.")
                                 if (failures.isNotEmpty()) append(" ${failures.size} source(s) could not be reached.")
-                                append("\n").append(sourceReport)
-                                if (summary.found > inserted) append("\nExisting duplicates or repeated entries were skipped.")
+                                append("\\n").append(sourceReport)
+                                if (summary.found > summary.inserted) append("\\nExisting duplicates or repeated entries were skipped.")
                             }
                         } catch (exception: Exception) {
                             message = "Collection failed: ${exception.message ?: "Unknown error"}"
