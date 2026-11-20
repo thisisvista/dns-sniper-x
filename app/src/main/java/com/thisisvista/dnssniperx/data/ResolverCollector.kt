@@ -2,6 +2,10 @@ package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -78,6 +82,7 @@ object ResolverCollector {
     ): CollectionSummary = withContext(Dispatchers.IO) {
         val results = mutableListOf<SourceFetchResult>()
         for (source in sources) {
+            currentCoroutineContext().ensureActive()
             val retrievedAt = System.currentTimeMillis()
             var found = 0
             var inserted = 0
@@ -94,7 +99,8 @@ object ResolverCollector {
 
             try {
                 downloadLines(source.url) { line ->
-                    val parsed = ResolverListParser.parse(line, source = source.id)
+                    val normalizedLine = line.removePrefix("\uFEFF").trimEnd('\r')
+                    val parsed = ResolverListParser.parse(normalizedLine, source = source.id)
                     if (parsed.isNotEmpty()) {
                         found += parsed.size
                         batch.addAll(parsed)
@@ -132,25 +138,31 @@ object ResolverCollector {
         require(maxChars >= 0 && maxLines >= 0)
         val builder = StringBuilder(minOf(maxChars, 16_384))
         var lineCount = 0
-        while (lineCount < maxLines) {
+        while (true) {
             val next = reader.read()
             if (next == -1) break
             if (builder.length >= maxChars) error("Source exceeded the size limit")
             val character = next.toChar()
             builder.append(character)
-            if (character == '\n') lineCount++
+            if (character == '\n') {
+                lineCount++
+                if (lineCount > maxLines) error("Source exceeded the line limit")
+            }
         }
-        if (lineCount >= maxLines && reader.read() != -1) {
-            error("Source exceeded the line limit")
+        if (builder.isNotEmpty() && builder.last() != '\n') {
+            lineCount++
+            if (lineCount > maxLines) error("Source exceeded the line limit")
         }
         return builder.toString()
     }
 
+    @OptIn(InternalCoroutinesApi::class)
     private suspend fun downloadLines(address: String, onLine: suspend (String) -> Unit) {
         require(isAllowedSourceUrl(address)) { "Source URL is not on the HTTPS allowlist" }
         var currentUrl = address
 
         for (redirectCount in 0..MAX_REDIRECTS) {
+            currentCoroutineContext().ensureActive()
             val connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT_MS
@@ -158,6 +170,12 @@ object ResolverCollector {
                 instanceFollowRedirects = false
                 setRequestProperty("User-Agent", "DNS-SniperX/0.3 Android")
                 setRequestProperty("Accept", "text/plain,text/csv,*/*")
+            }
+            val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion(
+                onCancelling = true,
+                invokeImmediately = false
+            ) { cause ->
+                if (cause is CancellationException) connection.disconnect()
             }
 
             try {
@@ -182,6 +200,7 @@ object ResolverCollector {
                     error("HTTP $status")
                 }
             } finally {
+                cancellationHandle?.dispose()
                 connection.disconnect()
             }
         }
@@ -206,6 +225,7 @@ object ResolverCollector {
                 break
             }
             totalChars++
+            if ((totalChars and 0xFF) == 0) currentCoroutineContext().ensureActive()
             if (totalChars > MAX_CHARS_PER_SOURCE) error("Source exceeded the size limit")
             val character = next.toChar()
             if (character == '\n') {

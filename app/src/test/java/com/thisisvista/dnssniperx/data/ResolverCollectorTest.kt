@@ -85,4 +85,26 @@ class ResolverCollectorTest {
         val reader = BufferedReader(StringReader("abc\n"))
         assertEquals("abc\n", ResolverCollector.readBoundedContent(reader, maxChars = 4, maxLines = 10))
     }
+
+    @Test fun boundedReaderRejectsFinalLineWithoutNewlineBeyondLimit() {
+        val reader = BufferedReader(StringReader("one\ntwo"))
+        val error = runCatching {
+            ResolverCollector.readBoundedContent(reader, maxChars = 100, maxLines = 1)
+        }.exceptionOrNull()
+        assertEquals("Source exceeded the line limit", error?.message)
+    }
+
+    @Test fun boundedReaderCountsFinalLineWithoutNewlineAtExactLimit() {
+        val reader = BufferedReader(StringReader("one\ntwo"))
+        assertEquals("one\ntwo", ResolverCollector.readBoundedContent(reader, maxChars = 100, maxLines = 2))
+    }
+
+    @Test fun boundedReaderAllowsEmptyInputWithZeroLineLimit() {
+        assertEquals("", ResolverCollector.readBoundedContent(BufferedReader(StringReader("")), maxChars = 0, maxLines = 0))
+    }
+
+    @Test fun parserHandlesBomAndCrLfLines() {
+        val parsed = ResolverListParser.parse("\uFEFF1.1.1.1\r\n8.8.8.8\r\n", source = "test")
+        assertEquals(listOf("1.1.1.1", "8.8.8.8"), parsed.map { it.address })
+    }
 }
