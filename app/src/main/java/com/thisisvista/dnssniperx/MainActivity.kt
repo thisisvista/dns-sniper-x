@@ -337,13 +337,13 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                         message = "Scan paused automatically because the device is critically hot. Let it cool, then resume."
                                         break
                                     }
-                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
+                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) / ScanResourcePolicy.MAX_SCAN_BATCH_SIZE}…"
                                     val scanParallelism = ScanResourcePolicy.recommendedParallelism(
                                         thermalStatus = thermalStatus,
                                         batteryPercent = batteryPercent,
                                         powerSaveMode = powerManager.isPowerSaveMode
                                     )
-                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}… (parallelism $scanParallelism)"
+                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) / ScanResourcePolicy.MAX_SCAN_BATCH_SIZE}… (parallelism $scanParallelism)"
                                     DnsProbe.scan(batch, parallelism = scanParallelism) { result ->
                                         // Only a valid DNS response counts as a working transport.
                                         // DNS errors and timeouts may have timings, but must not

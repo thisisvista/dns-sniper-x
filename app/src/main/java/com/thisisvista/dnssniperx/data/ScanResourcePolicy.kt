@@ -4,7 +4,7 @@ import android.os.PowerManager
 
 /** Conservative scan scheduling based on device thermal and battery conditions. */
 object ScanResourcePolicy {
-    const val MAX_SCAN_BATCH_SIZE = 50
+    const val MAX_SCAN_BATCH_SIZE = 10
 
     fun shouldPauseForThermal(thermalStatus: Int): Boolean =
         thermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL

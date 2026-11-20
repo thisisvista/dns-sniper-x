@@ -6,7 +6,7 @@ import org.junit.Test
 
 class ScanResourcePolicyTest {
     @Test fun scanBatchSizeIsBoundedForFrequentThermalRechecks() {
-        assertEquals(50, ScanResourcePolicy.MAX_SCAN_BATCH_SIZE)
+        assertEquals(10, ScanResourcePolicy.MAX_SCAN_BATCH_SIZE)
     }
     @Test fun normalConditionsUseConservativeDefault() {
         assertEquals(4, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_NONE, 80, false))
