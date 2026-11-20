@@ -4,6 +4,9 @@ import android.os.PowerManager
 
 /** Conservative scan scheduling based on device thermal and battery conditions. */
 object ScanResourcePolicy {
+    fun shouldPauseForThermal(thermalStatus: Int): Boolean =
+        thermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL
+
     fun recommendedParallelism(
         thermalStatus: Int,
         batteryPercent: Int,

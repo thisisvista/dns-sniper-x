@@ -14,6 +14,15 @@ class ScanResourcePolicyTest {
     @Test fun severeThermalStateUsesMinimumConcurrency() {
         assertEquals(1, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_SEVERE, 80, false))
     }
+    @Test fun criticalThermalStateRequestsPause() {
+        assertEquals(true, ScanResourcePolicy.shouldPauseForThermal(PowerManager.THERMAL_STATUS_CRITICAL))
+    }
+    @Test fun severeThermalStateDoesNotRequestCriticalPause() {
+        assertEquals(false, ScanResourcePolicy.shouldPauseForThermal(PowerManager.THERMAL_STATUS_SEVERE))
+    }
+    @Test fun normalThermalStateDoesNotRequestPause() {
+        assertEquals(false, ScanResourcePolicy.shouldPauseForThermal(PowerManager.THERMAL_STATUS_NONE))
+    }
     @Test fun batterySaverUsesMinimumConcurrency() {
         assertEquals(1, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_NONE, 80, true))
     }

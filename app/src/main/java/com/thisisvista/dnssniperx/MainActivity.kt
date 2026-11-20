@@ -321,8 +321,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             var completed = 0
                             scanProgress = "0 / ${pending.size}"
                             try {
-                                pending.chunked(500).forEachIndexed { batchIndex, batch ->
-                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
+                                var pausedForThermal = false
+                                for ((batchIndex, batch) in pending.chunked(500).withIndex()) {
                                     val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                                     val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                                     val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -332,6 +332,12 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     } else {
                                         PowerManager.THERMAL_STATUS_NONE
                                     }
+                                    if (ScanResourcePolicy.shouldPauseForThermal(thermalStatus)) {
+                                        pausedForThermal = true
+                                        message = "Scan paused automatically because the device is critically hot. Let it cool, then resume."
+                                        break
+                                    }
+                                    message = "Scanning batch ${batchIndex + 1} of ${(pending.size + 499) / 500}…"
                                     val scanParallelism = ScanResourcePolicy.recommendedParallelism(
                                         thermalStatus = thermalStatus,
                                         batteryPercent = batteryPercent,
@@ -383,7 +389,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                         scanProgress = "$completed / ${pending.size}"
                                     }
                                 }
-                                message = "Scan complete: $completed DNS entries tested and saved."
+                                if (!pausedForThermal) {
+                                    message = "Scan complete: $completed DNS entries tested and saved."
+                                }
                             } catch (cancelled: CancellationException) {
                                 message = "Scan paused. Completed batches were saved; press Resume to continue."
                                 throw cancelled
