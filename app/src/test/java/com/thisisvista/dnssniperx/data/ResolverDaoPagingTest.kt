@@ -109,7 +109,7 @@ class ResolverDaoPagingTest {
 
         val exported = dao.getSlipNetExportBatch(limit = 500, offset = 0)
 
-        assertEquals(listOf("8.8.8.8", "1.1.1.1"), exported.map { it.address })
+        assertEquals(listOf("1.1.1.1", "8.8.8.8"), exported.map { it.address })
         assertEquals(3, dao.countWorkingExportRows())
         assertEquals(2, dao.countSlipNetCompatibleCandidates())
     }

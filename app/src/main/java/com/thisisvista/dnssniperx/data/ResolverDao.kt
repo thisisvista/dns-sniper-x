@@ -150,6 +150,18 @@ interface ResolverDao {
           AND address NOT LIKE '.%'
           AND address NOT LIKE '%.'
           AND address NOT LIKE '%..%'
+          AND length(substr(address, 1, instr(address, '.') - 1)) BETWEEN 1 AND 3
+          AND CAST(substr(address, 1, instr(address, '.') - 1) AS INTEGER) BETWEEN 0 AND 255
+          AND length(substr(substr(address, instr(address, '.') + 1), 1, instr(substr(address, instr(address, '.') + 1), '.') - 1)) BETWEEN 1 AND 3
+          AND CAST(substr(substr(address, instr(address, '.') + 1), 1, instr(substr(address, instr(address, '.') + 1), '.') - 1) AS INTEGER) BETWEEN 0 AND 255
+          AND length(substr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), 1, instr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), '.') - 1)) BETWEEN 1 AND 3
+          AND CAST(substr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), 1, instr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), '.') - 1) AS INTEGER) BETWEEN 0 AND 255
+          AND length(substr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), instr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), '.') + 1)) BETWEEN 1 AND 3
+          AND CAST(substr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), instr(substr(substr(address, instr(address, '.') + 1), instr(substr(address, instr(address, '.') + 1), '.') + 1), '.') + 1) AS INTEGER) BETWEEN 0 AND 255
+          AND address NOT GLOB '*[^0-9.]*'
+          AND address NOT LIKE '.%'
+          AND address NOT LIKE '%.'
+          AND address NOT LIKE '%..%'
     """)
     suspend fun countSlipNetCompatibleCandidates(): Int
 
