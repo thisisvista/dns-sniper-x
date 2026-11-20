@@ -25,7 +25,9 @@ class TunnelProfileRepositoryTest {
         val secretStore = InMemoryTunnelSecretStore()
         val repository = TunnelProfileRepository(database.resolverDao(), secretStore)
         val profileId = "repository-${UUID.randomUUID()}"
+        val otherProfileId = "repository-other-${UUID.randomUUID()}"
         val privateCredential = "private-test-credential".toByteArray(Charsets.UTF_8)
+        val otherCredential = "other-profile-credential".toByteArray(Charsets.UTF_8)
         val profile = TunnelProfile(
             id = profileId,
             name = "Test DNSTT",
@@ -41,7 +43,15 @@ class TunnelProfileRepositoryTest {
             assertEquals(profile, repository.findProfile(profileId))
 
             repository.putSecret(profileId, "private-key", privateCredential)
+            repository.putSecret(profileId, "second-secret", "second-secret-value".toByteArray(Charsets.UTF_8))
+            val otherProfile = profile.copy(
+                id = otherProfileId,
+                name = "Other DNSTT"
+            )
+            repository.saveProfile(otherProfile)
+            repository.putSecret(otherProfileId, "private-key", otherCredential)
             assertArrayEquals(privateCredential, repository.getSecret(profileId, "private-key"))
+            assertArrayEquals(otherCredential, repository.getSecret(otherProfileId, "private-key"))
 
             val persistedMetadata = database.resolverDao().findTunnelProfile(profileId)
             assertEquals("public-noise-key", persistedMetadata?.dnsttServerPublicKey)
@@ -55,10 +65,15 @@ class TunnelProfileRepositoryTest {
             repository.deleteProfile(profileId)
             assertNull(repository.findProfile(profileId))
             assertNull(secretStore.get(profileId, "private-key"))
+            assertNull(secretStore.get(profileId, "second-secret"))
+            assertEquals(otherProfile, repository.findProfile(otherProfileId))
+            assertArrayEquals(otherCredential, repository.getSecret(otherProfileId, "private-key"))
         } finally {
             secretStore.deleteProfile(profileId)
+            secretStore.deleteProfile(otherProfileId)
             database.close()
             privateCredential.fill(0)
+            otherCredential.fill(0)
         }
     }
 
