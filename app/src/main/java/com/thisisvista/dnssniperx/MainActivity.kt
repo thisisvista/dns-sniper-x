@@ -728,7 +728,7 @@ private fun HomeContent(
 
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "Sends a standard DNS query over UDP and TCP. All untested entries are scanned automatically in batches of up to 500, with 8 simultaneous resolvers. Completed batches are saved so scanning can resume after interruption.",
+            "Sends a standard DNS query over UDP and TCP. Untested entries are scanned automatically in small batches of up to 10. Concurrency adapts from 1 to 4 based on device temperature and battery conditions. Completed results are saved so scanning can resume after interruption.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
