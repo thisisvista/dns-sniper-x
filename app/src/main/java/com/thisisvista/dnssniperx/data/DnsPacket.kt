@@ -59,14 +59,22 @@ internal object DnsPacket {
         return buffer.array()
     }
 
-    data class ResponseInfo(\n        val status: String,\n        val detail: String,\n        val responseCode: Int,\n        val recursionAvailable: Boolean = false,\n        val authoritativeAnswer: Boolean = false\n    )
+    data class ResponseInfo(
+        val status: String,
+        val detail: String,
+        val responseCode: Int,
+        val recursionAvailable: Boolean = false,
+        val authoritativeAnswer: Boolean = false
+    )
     private data class PacketMetadata(val extendedRcode: Int, val description: String, val hasRelevantAnswer: Boolean)
 
     fun validateResponse(query: ByteArray, response: ByteArray): ResponseInfo {
         require(query.size >= 12 && response.size >= 12) { "DNS packet is too short" }
         require(unsignedShort(query, 0) == unsignedShort(response, 0)) { "DNS transaction ID mismatch" }
         val flags = unsignedShort(response, 2)
-        val recursionAvailable = (flags and 0x0080) != 0 // RA: server says recursion is available\n        val authoritativeAnswer = (flags and 0x0400) != 0 // AA: answer is authoritative\n        require((flags and 0x8000) != 0) { "Packet is not a DNS response" }
+        val recursionAvailable = (flags and 0x0080) != 0 // RA: server says recursion is available
+        val authoritativeAnswer = (flags and 0x0400) != 0 // AA: answer is authoritative
+        require((flags and 0x8000) != 0) { "Packet is not a DNS response" }
         require((flags and 0x7800) == 0) { "Unexpected DNS opcode" }
 
         // A response must echo the question that was actually sent.
