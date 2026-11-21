@@ -46,6 +46,19 @@ class ResolverCollectorTest {
         assertTrue(sources.getValue("global-public-dns-directory").url.endsWith("/resolvers/global/all.txt"))
     }
 
+    @Test fun sourceSelectionKeepsReviewedOrderAndAllowsSubsets() {
+        val selected = ResolverCollector.selectSources(setOf("global-public-dns-directory", "iran-public-dns-directory"))
+        assertEquals(
+            listOf("iran-public-dns-directory", "global-public-dns-directory"),
+            selected.map { it.id }
+        )
+    }
+
+    @Test fun sourceSelectionRejectsUnknownIdsAndEmptySelection() {
+        assertFalse(runCatching { ResolverCollector.selectSources(emptySet()) }.isSuccess)
+        assertFalse(runCatching { ResolverCollector.selectSources(setOf("https://evil.example/list.txt")) }.isSuccess)
+    }
+
     @Test fun regionalSourceIsPrioritizedForProvenance() {
         assertEquals("iran-public-dns-directory", ResolverCollector.sources.first().id)
     }

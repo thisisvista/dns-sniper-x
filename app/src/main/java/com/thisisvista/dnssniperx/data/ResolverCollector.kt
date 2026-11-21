@@ -73,16 +73,26 @@ object ResolverCollector {
             url.userInfo == null
     }.getOrDefault(false)
 
+    /** Returns a validated, ordered subset of the reviewed source registry. */
+    internal fun selectSources(sourceIds: Set<String>): List<ResolverSource> {
+        require(sourceIds.isNotEmpty()) { "Select at least one reviewed source" }
+        val knownIds = sources.mapTo(mutableSetOf()) { it.id }
+        val unknownIds = sourceIds - knownIds
+        require(unknownIds.isEmpty()) { "Unknown resolver source ID(s): ${unknownIds.sorted().joinToString()}" }
+        return sources.filter { it.id in sourceIds }
+    }
+
     /**
-     * Streams source lines and persists bounded batches through [onBatch].
+     * Streams selected reviewed sources and persists bounded batches through [onBatch].
      * Only one source and at most INSERT_BATCH_SIZE parsed rows are retained at a time.
      */
     suspend fun collectAndStore(
+        sourceIds: Set<String> = sources.mapTo(mutableSetOf()) { it.id },
         onBatch: suspend (List<ResolverEntity>) -> Int,
         onProgress: suspend (sourceName: String, found: Int, inserted: Int) -> Unit = { _, _, _ -> }
     ): CollectionSummary = withContext(Dispatchers.IO) {
         val results = mutableListOf<SourceFetchResult>()
-        for (source in sources) {
+        for (source in selectSources(sourceIds)) {
             currentCoroutineContext().ensureActive()
             val retrievedAt = System.currentTimeMillis()
             var found = 0
