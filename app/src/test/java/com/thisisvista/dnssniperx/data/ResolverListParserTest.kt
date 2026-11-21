@@ -86,6 +86,19 @@ class ResolverListParserTest {
         assertTrue(result.all { it.source == "manual" })
     }
 
+    @Test fun importsWhiteDnsDetailedTxtReportLinesAsUntestedCandidates() {
+        val result = ResolverListParser.parse(
+            "WhiteDNS Android DNS Results\n" +
+                "[PASSED] 1\n" +
+                "1.1.1.1  status=valid  score=6/6  latency=12ms  tunnel=true\n" +
+                "8.8.8.8  status=invalid  score=1/6  tunnel=false"
+        )
+
+        assertEquals(listOf("1.1.1.1", "8.8.8.8"), result.map { it.address })
+        assertTrue(result.all { it.port == 53 })
+        assertTrue(result.all { it.status == "NOT_TESTED" })
+    }
+
     @Test fun importsWhiteDnsPassedRawTxtLinesAsUntestedCandidates() {
         val result = ResolverListParser.parse(
             "1.1.1.1\n8.8.8.8\n1.1.1.1",
