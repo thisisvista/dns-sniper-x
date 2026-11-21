@@ -356,8 +356,18 @@ interface ResolverDao {
                 (udpStatus != 'NOT_TESTED' OR tcpStatus != 'NOT_TESTED') AND
                 (udpStatus != 'PASS' OR tcpStatus != 'PASS' OR COALESCE(note, '') LIKE '%WARNING:%'))
         )
+          AND (
+            :sourceFilter = 'ALL'
+            OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
+            OR (:sourceFilter = 'PUBLIC' AND source IN (
+                'iran-public-dns-directory',
+                'public-dns-info',
+                'trickest-resolvers',
+                'global-public-dns-directory'
+            ))
+          )
     """)
-    suspend fun countPendingScan(retryUnsuccessful: Boolean): Int
+    suspend fun countPendingScan(retryUnsuccessful: Boolean, sourceFilter: String): Int
 
     @Query("""
         SELECT * FROM resolvers
@@ -368,11 +378,22 @@ interface ResolverDao {
                 (udpStatus != 'NOT_TESTED' OR tcpStatus != 'NOT_TESTED') AND
                 (udpStatus != 'PASS' OR tcpStatus != 'PASS' OR COALESCE(note, '') LIKE '%WARNING:%'))
         )
+          AND (
+            :sourceFilter = 'ALL'
+            OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
+            OR (:sourceFilter = 'PUBLIC' AND source IN (
+                'iran-public-dns-directory',
+                'public-dns-info',
+                'trickest-resolvers',
+                'global-public-dns-directory'
+            ))
+          )
         ORDER BY id ASC
         LIMIT :limit
     """)
     suspend fun getPendingScanBatch(
         retryUnsuccessful: Boolean,
+        sourceFilter: String,
         afterId: Long,
         limit: Int
     ): List<ResolverEntity>
