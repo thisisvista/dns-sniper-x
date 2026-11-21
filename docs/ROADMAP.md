@@ -2,7 +2,7 @@
 
 ## Stage 0 — Repository and Android foundation
 - [x] Create the independent Android project and GitHub repository.
-- [ ] Add and verify the Gradle wrapper.
+- [x] Add and verify the Gradle wrapper.
 - [x] Run Android builds and unit tests in CI.
 
 ## Stage 1 — Resolver data foundation
