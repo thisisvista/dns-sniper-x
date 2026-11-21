@@ -179,6 +179,58 @@ class ResolverDaoPagingTest {
     }
 
     @Test
+    fun providerCandidatesArePublicScanEligibleAndResumeStateIsAtomic() = runBlocking {
+        // Simulate an endpoint first collected from a different source.
+        dao.insertIgnore(listOf(ResolverEntity(address = "10.10.10.10", source = "manual")))
+
+        val sourceId = "ripestat-asn-prefix-tci"
+        val state = ProviderDiscoveryStateEntity(
+            selectionKey = "tci",
+            providerIds = "tci",
+            nextOffset = 10L,
+            totalCandidates = 100L,
+            complete = false,
+            updatedAt = 123L
+        )
+        dao.persistProviderDiscoveryBatch(
+            resolvers = listOf(
+                ResolverEntity(
+                    address = "10.10.10.10",
+                    source = ProviderPrefixCandidateStore.SOURCE_NAME,
+                    status = "NOT_TESTED"
+                )
+            ),
+            sources = listOf(
+                ResolverSourceEntity(
+                    sourceId = sourceId,
+                    displayName = "TCI ASN prefixes",
+                    sourceType = "ASN_ROUTING_DISCOVERY",
+                    providerId = "tci",
+                    countryCode = "IR",
+                    trustLevel = "ROUTING_DATA"
+                )
+            ),
+            evidence = listOf(
+                ResolverEvidenceEntity(
+                    address = "10.10.10.10",
+                    sourceId = sourceId,
+                    providerId = "tci",
+                    evidenceType = EvidenceType.REGISTRY_PREFIX,
+                    ownershipStatus = OwnershipStatus.CANDIDATE
+                )
+            ),
+            state = state
+        )
+
+        val publicBatch = dao.getPendingScanBatch(false, "PUBLIC", 0L, 10)
+        assertEquals(listOf("10.10.10.10"), publicBatch.map { it.address })
+        assertEquals(1, dao.countPendingScan(false, "PUBLIC"))
+        assertEquals(state, dao.getProviderDiscoveryState("tci"))
+        assertEquals(1, dao.getResolverEvidence("10.10.10.10", 53).size)
+        assertEquals("tci", dao.getSourcesForProvider("tci").single().providerId)
+    }
+
+    @Test
     fun slipNetExportQueryIncludesOnlyPort53IPv4Resolvers() = runBlocking {
         dao.insertIgnore(
             listOf(
