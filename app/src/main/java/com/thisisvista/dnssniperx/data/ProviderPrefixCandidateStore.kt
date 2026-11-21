@@ -2,8 +2,14 @@ package com.thisisvista.dnssniperx.data
 
 /** Stores provider-prefix candidates with explicit ASN evidence and no DNS-health claim. */
 class ProviderPrefixCandidateStore(private val dao: ResolverDao) {
-    suspend fun persist(batch: ProviderPrefixDiscovery.Batch): Int {
-        if (batch.candidates.isEmpty()) return 0
+    suspend fun persist(
+        batch: ProviderPrefixDiscovery.Batch,
+        state: ProviderDiscoveryStateEntity? = null
+    ): Int {
+        if (batch.candidates.isEmpty()) {
+            dao.persistProviderDiscoveryBatch(emptyList(), emptyList(), emptyList(), state)
+            return 0
+        }
         val collectedAt = System.currentTimeMillis()
         val resolvers = batch.candidates.map { candidate ->
             ResolverEntity(
@@ -45,7 +51,7 @@ class ProviderPrefixCandidateStore(private val dao: ResolverDao) {
 
         // A process interruption cannot leave resolver rows without their provenance
         // or attach provider evidence only partially.
-        return dao.persistProviderDiscoveryBatch(resolvers, sources, evidence)
+        return dao.persistProviderDiscoveryBatch(resolvers, sources, evidence, state)
     }
 
     companion object {

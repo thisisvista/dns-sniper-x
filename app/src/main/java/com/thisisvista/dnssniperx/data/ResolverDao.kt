@@ -359,11 +359,15 @@ interface ResolverDao {
           AND (
             :sourceFilter = 'ALL'
             OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
-            OR (:sourceFilter = 'PUBLIC' AND source IN (
-                'iran-public-dns-directory',
-                'public-dns-info',
-                'trickest-resolvers',
-                'global-public-dns-directory'
+            OR (:sourceFilter = 'PUBLIC' AND (
+                source IN (
+                    'iran-public-dns-directory',
+                    'public-dns-info',
+                    'trickest-resolvers',
+                    'global-public-dns-directory',
+                    'provider-asn-prefix-sample'
+                )
+                OR additionalSources LIKE '%provider-asn-prefix-sample%'
             ))
           )
     """)
@@ -381,11 +385,15 @@ interface ResolverDao {
           AND (
             :sourceFilter = 'ALL'
             OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
-            OR (:sourceFilter = 'PUBLIC' AND source IN (
-                'iran-public-dns-directory',
-                'public-dns-info',
-                'trickest-resolvers',
-                'global-public-dns-directory'
+            OR (:sourceFilter = 'PUBLIC' AND (
+                source IN (
+                    'iran-public-dns-directory',
+                    'public-dns-info',
+                    'trickest-resolvers',
+                    'global-public-dns-directory',
+                    'provider-asn-prefix-sample'
+                )
+                OR additionalSources LIKE '%provider-asn-prefix-sample%'
             ))
           )
         ORDER BY id ASC
@@ -529,13 +537,24 @@ interface ResolverDao {
     suspend fun persistProviderDiscoveryBatch(
         resolvers: List<ResolverEntity>,
         sources: List<ResolverSourceEntity>,
-        evidence: List<ResolverEvidenceEntity>
+        evidence: List<ResolverEvidenceEntity>,
+        state: ProviderDiscoveryStateEntity? = null
     ): Int {
         val inserted = insertOrMergeSources(resolvers)
         sources.forEach { upsertResolverSource(it) }
         if (evidence.isNotEmpty()) insertResolverEvidenceRows(evidence)
+        if (state != null) upsertProviderDiscoveryState(state)
         return inserted
     }
+
+    @Query("SELECT * FROM provider_discovery_state WHERE selectionKey = :selectionKey LIMIT 1")
+    suspend fun getProviderDiscoveryState(selectionKey: String): ProviderDiscoveryStateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertProviderDiscoveryState(state: ProviderDiscoveryStateEntity)
+
+    @Query("DELETE FROM provider_discovery_state WHERE selectionKey = :selectionKey")
+    suspend fun deleteProviderDiscoveryState(selectionKey: String)
 
     @Query("SELECT * FROM resolver_evidence WHERE address = :address AND port = :port ORDER BY collectedAt DESC, id DESC")
     suspend fun getResolverEvidence(address: String, port: Int): List<ResolverEvidenceEntity>
