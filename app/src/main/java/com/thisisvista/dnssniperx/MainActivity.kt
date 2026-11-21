@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -94,6 +95,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var pendingExportMode by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Your DNS library is stored on this device.") }
     var isCollecting by rememberSaveable { mutableStateOf(false) }
+    var selectedSourceIds by rememberSaveable { mutableStateOf(ResolverCollector.sources.map { it.id }) }
     var isImporting by rememberSaveable { mutableStateOf(false) }
     var importProgress by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
@@ -228,6 +230,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             onImportTextChange = { importText = it },
             message = message,
             isCollecting = isCollecting,
+            selectedSourceIds = selectedSourceIds,
+            onSourceSelectionChange = { selectedSourceIds = it },
             isImporting = isImporting,
             importProgress = importProgress,
             isScanning = isScanning,
@@ -305,13 +309,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     }
                 }
             },
-            onCollect = {
+            onCollect = { sourceIds ->
                 if (!isCollecting && !isImporting) {
                     scope.launch {
                         isCollecting = true
                         message = "Streaming public resolver lists in small batches…"
                         try {
                             val summary = ResolverCollector.collectAndStore(
+                                sourceIds = sourceIds,
                                 onBatch = { batch -> dao.insertOrMergeSources(batch) },
                                 onProgress = { sourceName, found, inserted ->
                                     message = "$sourceName: received $found candidates; saved $inserted new entries…"
@@ -501,6 +506,8 @@ private fun HomeContent(
     onImportTextChange: (String) -> Unit,
     message: String,
     isCollecting: Boolean,
+    selectedSourceIds: List<String>,
+    onSourceSelectionChange: (List<String>) -> Unit,
     isImporting: Boolean,
     importProgress: String,
     isScanning: Boolean,
@@ -511,7 +518,7 @@ private fun HomeContent(
     isDotTesting: Boolean,
     dotResults: List<DotProbeResult>,
     onTestDot: () -> Unit,
-    onCollect: () -> Unit,
+    onCollect: (Set<String>) -> Unit,
     onCollectNetworkDns: (String) -> Unit,
     onScan: (retryUnsuccessful: Boolean) -> Unit,
     onImportFile: () -> Unit,
@@ -630,7 +637,25 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = onCollect, enabled = !isCollecting && !isImporting && !isScanning, modifier = Modifier.fillMaxWidth()) {
+        Text("Public DNS sources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Choose which reviewed public lists to collect. At least one source must remain selected; the regional list is processed first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ResolverCollector.sources.forEach { source ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Checkbox(
+                    checked = source.id in selectedSourceIds,
+                    onCheckedChange = { checked ->
+                        val updated = if (checked) selectedSourceIds + source.id else selectedSourceIds - source.id
+                        if (updated.isNotEmpty()) onSourceSelectionChange(updated)
+                    },
+                    enabled = !isCollecting && !isImporting && !isScanning
+                )
+                Column(modifier = Modifier.weight(1f).padding(top = 10.dp)) {
+                    Text(source.description, style = MaterialTheme.typography.bodyMedium)
+                    Text(source.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Button(onClick = { onCollect(selectedSourceIds.toSet()) }, enabled = !isCollecting && !isImporting && !isScanning && selectedSourceIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
