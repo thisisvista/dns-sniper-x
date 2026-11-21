@@ -94,8 +94,14 @@ object DnsProbe {
             } else {
                 ProbeResult(validation.status, (System.nanoTime() - started) / 1_000_000, validation.detail)
             }
-            val withEdnsDiagnostic = addEdnsPayloadDiagnostic(address, resolver.port, useTcp, baseResult)
-            addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
+            // Extended diagnostics add extra DNS traffic. Skip them when the
+            // baseline transport check did not receive a valid answer.
+            if (!shouldRunExtendedDiagnostics(baseResult.status)) {
+                baseResult
+            } else {
+                val withEdnsDiagnostic = addEdnsPayloadDiagnostic(address, resolver.port, useTcp, baseResult)
+                addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
+            }
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
         } catch (exception: Exception) {
@@ -176,6 +182,8 @@ object DnsProbe {
         }
     }
 
+
+    internal fun shouldRunExtendedDiagnostics(status: String): Boolean = status == "PASS"
 
     internal fun appendDiagnostic(base: ProbeResult, diagnostic: String, maxLength: Int = 360): ProbeResult {
         val entries = listOfNotNull(

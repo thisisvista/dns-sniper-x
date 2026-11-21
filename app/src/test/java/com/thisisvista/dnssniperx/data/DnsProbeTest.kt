@@ -18,6 +18,15 @@ class DnsProbeTest {
         assertTrue(DnsProbe.normalizeParallelism(-5) == 1)
     }
 
+    @Test fun extendedDiagnosticsOnlyRunAfterValidBaselineResponse() {
+        assertTrue(DnsProbe.shouldRunExtendedDiagnostics("PASS"))
+        assertTrue(!DnsProbe.shouldRunExtendedDiagnostics("TIMEOUT"))
+        assertTrue(!DnsProbe.shouldRunExtendedDiagnostics("DNS_ERROR"))
+        assertTrue(!DnsProbe.shouldRunExtendedDiagnostics("NO_ANSWER"))
+        assertTrue(!DnsProbe.shouldRunExtendedDiagnostics("TRUNCATED"))
+        assertTrue(!DnsProbe.shouldRunExtendedDiagnostics("FAIL"))
+    }
+
     @Test fun onePositiveAnswerIsInconclusive() {
         val positive = DnsPacket.ResponseInfo("PASS", "positive", 0)
         assertTrue(DnsProbe.classifyNxDomainResponses(positive, null).contains("inconclusive"))
