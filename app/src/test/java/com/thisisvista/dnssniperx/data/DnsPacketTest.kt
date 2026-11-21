@@ -143,6 +143,31 @@ class DnsPacketTest {
     }
 
     @Test
+    fun validatesTxtRecordAnswers() {
+        val query = DnsPacket.buildQuery("google.com", 42, includeEdns = false, queryType = 16)
+        val response = query.toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[6] = 0
+            this[7] = 1
+            addAll(listOf(0xc0, 0x0c, 0, 16, 0, 1, 0, 0, 0, 60, 0, 4, 3, 'v'.code, '='.code, '1'.code).map { it.toByte() })
+        }.toByteArray()
+        assertEquals("PASS", DnsPacket.validateResponse(query, response).status)
+    }
+
+    @Test
+    fun rejectsTruncatedTxtCharacterString() {
+        val query = DnsPacket.buildQuery("google.com", 42, includeEdns = false, queryType = 16)
+        val response = query.toMutableList().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+            this[6] = 0
+            this[7] = 1
+            addAll(listOf(0xc0, 0x0c, 0, 16, 0, 1, 0, 0, 0, 60, 0, 2, 3, 'x'.code).map { it.toByte() })
+        }.toByteArray()
+        assertThrows(IllegalArgumentException::class.java) { DnsPacket.validateResponse(query, response) }
+    }
+    @Test
     fun identifiesNoAnswerResponse() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOf().apply {

@@ -149,6 +149,7 @@ internal object DnsPacket {
         var opt: PacketMetadata? = null
         val cnameTargets = mutableMapOf<String, String>()
         val addressOwners = mutableSetOf<String>()
+        val txtOwners = mutableSetOf<String>()
         repeat(answers + authorities + additionals) { index ->
             val owner = readName(packet, offset, knownLabelOffsets)
             offset = owner.nextOffset
@@ -180,6 +181,20 @@ internal object DnsPacket {
                         require(previous == null || previous == target) {
                             "Conflicting CNAME targets for the same owner"
                         }
+                    }
+                    16 -> {
+                        // TXT RDATA is a sequence of length-prefixed character strings.
+                        var txtOffset = dataStart
+                        val txtEnd = dataStart + dataLength
+                        while (txtOffset < txtEnd) {
+                            val segmentLength = packet[txtOffset].toInt() and 0xff
+                            txtOffset++
+                            require(txtOffset + segmentLength <= txtEnd) {
+                                "Truncated TXT character-string data"
+                            }
+                            txtOffset += segmentLength
+                        }
+                        if (dataLength > 0) txtOwners += owner.value.lowercase()
                     }
                 }
             }
@@ -236,6 +251,7 @@ internal object DnsPacket {
             1, 28 -> reachableOwners.any { it in addressOwners }
             // A CNAME lookup is answered by the alias record itself.
             5 -> queryName.lowercase() in cnameTargets
+            16 -> reachableOwners.any { it in txtOwners }
             else -> reachableOwners.any { it in cnameTargets || it in addressOwners }
         }
         return opt?.copy(hasRelevantAnswer = hasRelevantAnswer)

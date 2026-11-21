@@ -101,7 +101,8 @@ object DnsProbe {
             } else {
                 val withEdnsDiagnostic = addEdnsPayloadDiagnostic(address, resolver.port, useTcp, baseResult)
                 val withNxDomainDiagnostic = addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
-                addRecursionDiagnostic(address, resolver.port, useTcp, withNxDomainDiagnostic)
+                val withRecursionDiagnostic = addRecursionDiagnostic(address, resolver.port, useTcp, withNxDomainDiagnostic)
+                addTxtDiagnostic(address, resolver.port, useTcp, withRecursionDiagnostic)
             }
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
@@ -157,6 +158,27 @@ object DnsProbe {
         return appendDiagnostic(base, diagnostic)
     }
 
+    /**
+     * Verifies that the resolver can return a structurally valid TXT answer.
+     * This is diagnostic only: TXT support is not required for every DNS use case.
+     */
+    private fun addTxtDiagnostic(
+        address: InetAddress, port: Int, useTcp: Boolean, base: ProbeResult
+    ): ProbeResult {
+        return try {
+            val query = DnsPacket.buildQuery("google.com", Random.nextInt(0, 65_536), includeEdns = false, queryType = 16)
+            val response = if (useTcp) tcpQuery(address, port, query) else udpQuery(address, port, query)
+            val info = DnsPacket.validateResponse(query, response)
+            val diagnostic = when (info.status) {
+                "PASS" -> "TXT lookup succeeded"
+                "NO_ANSWER" -> "TXT lookup returned no matching TXT record"
+                else -> "TXT lookup ${info.status}: ${info.detail.take(100)}"
+            }
+            appendDiagnostic(base, diagnostic)
+        } catch (exception: Exception) {
+            appendDiagnostic(base, "TXT lookup unavailable: ${exception.message?.take(70) ?: "network error"}")
+        }
+    }
     /**
      * Records the resolver's RA/AA flags. RA advertises recursion availability;
      * it is not proof that arbitrary recursive lookups succeed.
