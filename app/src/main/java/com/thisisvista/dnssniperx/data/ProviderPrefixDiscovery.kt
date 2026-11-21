@@ -38,7 +38,8 @@ object ProviderPrefixDiscovery {
         AsnSeed("hiweb", "های‌وب", 56402),
         AsnSeed("pishgaman", "پیشگامان", 49100),
         AsnSeed("respina", "رسپینا", 42337),
-        AsnSeed("afranet", "افرانت", 25184)
+        AsnSeed("afranet", "افرانت", 25184),
+        AsnSeed("fanap", "فناپ تلکام", 24631, "https://github.com/mmbateni/routable_Iranian_ASNs")
     )
 
     suspend fun fetchProviderPrefixes(

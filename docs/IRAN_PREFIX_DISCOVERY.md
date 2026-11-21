@@ -18,7 +18,9 @@ It does not treat a country allocation as a DNS server list.
 
 The app has a narrow seed mapping for primary ASNs: MCI AS197207, Irancell AS44244,
 Rightel AS57218, TCI AS58224, Shatel AS31549, Asiatech AS43754, Pars Online AS16322,
-Mobinnet AS50810, HiWeb AS56402, Pishgaman AS49100, Respina AS42337 and Afranet AS25184.
+Mobinnet AS50810, HiWeb AS56402, Pishgaman AS49100, Respina AS42337, Afranet AS25184 and Fanap Telecom AS24631. Shatel Mobile has no
+separate seed because it operates as an MVNO and may use its host network; Sabanet is
+left unmapped until a reliable current ASN-holder mapping is confirmed.
 
 For each selected seed, the app requests current announced IPv4 prefixes from the RIPEstat
 Announced Prefixes API (minimum 10 RIS peers), then intersects those prefixes with current
