@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class], version = 9, exportSchema = false)
+@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class, ProviderEntity::class, ResolverSourceEntity::class, ResolverEvidenceEntity::class], version = 10, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
 
@@ -124,6 +124,93 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS provider_catalog (
+                        providerId TEXT NOT NULL PRIMARY KEY,
+                        displayName TEXT NOT NULL,
+                        providerType TEXT NOT NULL,
+                        countryCode TEXT NOT NULL,
+                        aliases TEXT NOT NULL,
+                        enabled INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS resolver_sources (
+                        sourceId TEXT NOT NULL PRIMARY KEY,
+                        displayName TEXT NOT NULL,
+                        sourceType TEXT NOT NULL,
+                        sourceUrl TEXT,
+                        providerId TEXT,
+                        countryCode TEXT NOT NULL,
+                        trustLevel TEXT NOT NULL,
+                        enabled INTEGER NOT NULL,
+                        lastFetchedAt INTEGER,
+                        lastError TEXT
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_resolver_sources_providerId ON resolver_sources(providerId)")
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS resolver_evidence (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        address TEXT NOT NULL,
+                        port INTEGER NOT NULL,
+                        sourceId TEXT NOT NULL,
+                        providerId TEXT,
+                        collectedAt INTEGER NOT NULL,
+                        evidenceType TEXT NOT NULL,
+                        ownershipStatus TEXT NOT NULL,
+                        evidenceDetails TEXT
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_resolver_evidence_address_port_sourceId ON resolver_evidence(address, port, sourceId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_resolver_evidence_providerId ON resolver_evidence(providerId)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_resolver_evidence_ownershipStatus ON resolver_evidence(ownershipStatus)")
+
+                val providers = listOf(
+                    listOf("mci", "همراه اول", "MOBILE", "IR", "MCI;Hamrah-e Aval;Mobile Communications Company of Iran"),
+                    listOf("irancell", "ایرانسل", "MOBILE", "IR", "MTN Irancell;Irancell"),
+                    listOf("rightel", "رایتل", "MOBILE", "IR", "RighTel"),
+                    listOf("shatel-mobile", "شاتل موبایل", "MOBILE", "IR", "Shatel Mobile"),
+                    listOf("tci", "مخابرات ایران", "FIXED", "IR", "Telecommunication Company of Iran;TCI"),
+                    listOf("pars-online", "پارس‌آنلاین", "FIXED", "IR", "Pars Online"),
+                    listOf("shatel", "شاتل", "FIXED", "IR", "Shatel"),
+                    listOf("asiatech", "آسیاتک", "FIXED", "IR", "Asiatech"),
+                    listOf("mobinnet", "مبین‌نت", "FIXED_WIRELESS", "IR", "Mobinnet"),
+                    listOf("hiweb", "های‌وب", "FIXED", "IR", "HiWeb"),
+                    listOf("pishgaman", "پیشگامان", "FIXED", "IR", "Pishgaman"),
+                    listOf("fanap", "فناپ تلکام", "FIXED", "IR", "Fanap Telecom"),
+                    listOf("afranet", "افرانت", "FIXED", "IR", "Afranet"),
+                    listOf("sabanet", "صبانت", "FIXED", "IR", "Sabanet"),
+                    listOf("respina", "رسپینا", "FIXED", "IR", "Respina")
+                )
+                providers.forEach { row ->
+                    database.execSQL(
+                        "INSERT OR IGNORE INTO provider_catalog (providerId, displayName, providerType, countryCode, aliases, enabled) VALUES (?, ?, ?, ?, ?, 1)",
+                        row.toTypedArray()
+                    )
+                }
+
+                val sources = listOf(
+                    arrayOf<Any>("iran-public-dns-directory", "Iran public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt", "IR", "COMMUNITY"),
+                    arrayOf<Any>("public-dns-info", "Public DNS Info", "PUBLIC_DIRECTORY", "https://public-dns.info/nameservers.csv", "ZZ", "COMMUNITY"),
+                    arrayOf<Any>("trickest-resolvers", "Trickest Resolvers", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt", "ZZ", "COMMUNITY"),
+                    arrayOf<Any>("global-public-dns-directory", "Global public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt", "ZZ", "COMMUNITY"),
+                    arrayOf<Any>("current-network", "DNS servers exposed by the active Android network", "NETWORK_DISCOVERY", null, "ZZ", "OBSERVED"),
+                    arrayOf<Any>("manual", "Manual DNS entry", "USER_INPUT", null, "ZZ", "USER_PROVIDED"),
+                    arrayOf<Any>("txt-import", "Imported TXT file", "USER_INPUT", null, "ZZ", "USER_PROVIDED")
+                )
+                sources.forEach { row ->
+                    database.execSQL(
+                        "INSERT OR IGNORE INTO resolver_sources (sourceId, displayName, sourceType, sourceUrl, countryCode, trustLevel, enabled) VALUES (?, ?, ?, ?, ?, ?, 1)",
+                        row
+                    )
+                }
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -132,7 +219,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also { instance = it }
             }
     }
 }

@@ -502,4 +502,35 @@ interface ResolverDao {
 
     @Query("DELETE FROM resolvers WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT * FROM provider_catalog WHERE enabled = 1 ORDER BY providerType ASC, displayName COLLATE NOCASE ASC")
+    fun observeProviders(): Flow<List<ProviderEntity>>
+
+    @Query("SELECT * FROM provider_catalog WHERE providerId = :providerId LIMIT 1")
+    suspend fun findProvider(providerId: String): ProviderEntity?
+
+    @Query("SELECT * FROM resolver_sources WHERE enabled = 1 ORDER BY sourceType ASC, displayName COLLATE NOCASE ASC")
+    fun observeResolverSources(): Flow<List<ResolverSourceEntity>>
+
+    @Query("SELECT * FROM resolver_sources WHERE providerId = :providerId AND enabled = 1 ORDER BY displayName COLLATE NOCASE ASC")
+    suspend fun getSourcesForProvider(providerId: String): List<ResolverSourceEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertResolverSource(source: ResolverSourceEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertResolverEvidence(evidence: ResolverEvidenceEntity): Long
+
+    @Query("SELECT * FROM resolver_evidence WHERE address = :address AND port = :port ORDER BY collectedAt DESC, id DESC")
+    suspend fun getResolverEvidence(address: String, port: Int): List<ResolverEvidenceEntity>
+
+    @Query("SELECT * FROM resolver_evidence WHERE providerId = :providerId ORDER BY collectedAt DESC, id DESC LIMIT :limit")
+    suspend fun getEvidenceForProvider(providerId: String, limit: Int): List<ResolverEvidenceEntity>
+
+    @Query("SELECT COUNT(*) FROM resolver_evidence WHERE providerId = :providerId AND ownershipStatus = 'VERIFIED'")
+    suspend fun countVerifiedEvidenceForProvider(providerId: String): Int
+
+    @Query("SELECT COUNT(*) FROM resolver_evidence WHERE providerId = :providerId AND ownershipStatus = 'UNVERIFIED'")
+    suspend fun countUnverifiedEvidenceForProvider(providerId: String): Int
+
 }
