@@ -36,12 +36,15 @@ class ProviderDiscoveryCoordinator(
 
         val now = System.currentTimeMillis()
         val cachedSnapshot = previous?.prefixSnapshotJson?.takeIf {
-            previous.snapshotFetchedAt != null && now - previous.snapshotFetchedAt in 0..SNAPSHOT_TTL_MS
+            previous.snapshotFetchedAt != null &&
+                (previous.nextOffset > 0L || now - previous.snapshotFetchedAt in 0..SNAPSHOT_TTL_MS)
         }?.let { encoded ->
             runCatching { pipeline.decodeSnapshot(encoded, previous.iranAllocationRanges) }.getOrNull()
         }
-        // Reuse the exact same ordered prefix snapshot for every resumed page.
-        // RIPEstat and delegated stats are refreshed only after the 24-hour TTL.
+        // Once a page has been committed, retain its exact ordered snapshot until
+        // discovery completes; refreshing mid-run would make the persisted offset
+        // point into a different candidate list and could silently skip addresses.
+        // A stale snapshot at offset zero may be refreshed safely.
         val snapshot = cachedSnapshot ?: pipeline.fetchSnapshot(normalizedIds)
         val result = pipeline.discoverBatch(snapshot, previous?.nextOffset ?: 0L, batchSize)
         val state = ProviderDiscoveryStateEntity(
