@@ -521,6 +521,9 @@ interface ResolverDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertResolverEvidence(evidence: ResolverEvidenceEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertResolverEvidenceRows(evidence: List<ResolverEvidenceEntity>)
+
     @Query("SELECT * FROM resolver_evidence WHERE address = :address AND port = :port ORDER BY collectedAt DESC, id DESC")
     suspend fun getResolverEvidence(address: String, port: Int): List<ResolverEvidenceEntity>
 

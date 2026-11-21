@@ -1,6 +1,6 @@
 package com.thisisvista.dnssniperx.data
 
-/** Persists bounded prefix samples without confusing registry evidence with DNS health. */
+/** Persists bounded country-prefix samples with candidate-only evidence. */
 class IranPrefixCandidateStore(private val dao: ResolverDao) {
     suspend fun persist(batch: IranPrefixDiscovery.Batch): Int {
         if (batch.candidates.isEmpty()) return 0
@@ -26,20 +26,18 @@ class IranPrefixCandidateStore(private val dao: ResolverDao) {
             )
         }
         val inserted = dao.insertOrMergeSources(resolvers)
-        batch.candidates.forEach { candidate ->
-            dao.insertResolverEvidence(
-                ResolverEvidenceEntity(
-                    address = candidate.address,
-                    port = 53,
-                    sourceId = IranPrefixRegistryClient.SOURCE_ID,
-                    providerId = candidate.providerId,
-                    collectedAt = collectedAt,
-                    evidenceType = EvidenceType.REGISTRY_PREFIX,
-                    ownershipStatus = OwnershipStatus.CANDIDATE,
-                    evidenceDetails = "country=IR;cidr=${candidate.cidr};source=RIPE delegated stats"
-                )
+        val evidence = batch.candidates.map { candidate ->
+            ResolverEvidenceEntity(
+                address = candidate.address,
+                port = 53,
+                sourceId = IranPrefixRegistryClient.SOURCE_ID,
+                collectedAt = collectedAt,
+                evidenceType = EvidenceType.REGISTRY_PREFIX,
+                ownershipStatus = OwnershipStatus.CANDIDATE,
+                evidenceDetails = "country=IR;cidr=${candidate.cidr};source=RIPE delegated stats"
             )
         }
+        dao.insertResolverEvidenceRows(evidence)
         return inserted
     }
 
