@@ -32,8 +32,14 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Generate and verify Gradle wrapper
+        run: |
+          gradle wrapper --gradle-version 8.13 --distribution-type bin
+          chmod +x gradlew
+          ./gradlew --version
+
       - name: Run unit tests
-        run: gradle testDebugUnitTest
+        run: ./gradlew testDebugUnitTest
 
       - name: Run Android Keystore instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -54,10 +60,10 @@ jobs:
           # Reduce emulator load during instrumentation startup.
           disable-animations: true
           # The action waits for sys.boot_completed before running this command.
-          script: gradle connectedDebugAndroidTest
+          script: ./gradlew connectedDebugAndroidTest
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -66,3 +72,15 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload generated Gradle wrapper
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-gradle-wrapper
+          path: |
+            gradlew
+            gradlew.bat
+            gradle/wrapper/gradle-wrapper.jar
+            gradle/wrapper/gradle-wrapper.properties
+          if-no-files-found: error
+          retention-days: 7

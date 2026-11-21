@@ -79,4 +79,4 @@ The app makes network requests only when the user starts collection, DNS scannin
 - Native DNSTT and Slipstream client adapters, secure configuration provisioning, and Android `VpnService` lifecycle/routing.
 - Controlled end-to-end tunnel verification using a valid test server and required credentials/certificates.
 - Physical-device testing of exported TXT files with SlipNet.
-- Privacy/network-use disclosures, signed release builds, and release notes.
+- Signed release builds and release notes.
