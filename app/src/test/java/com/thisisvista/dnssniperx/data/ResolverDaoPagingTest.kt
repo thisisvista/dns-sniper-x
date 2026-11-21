@@ -118,7 +118,7 @@ class ResolverDaoPagingTest {
     fun scanCursorContinuesAcrossBatchesAsCompletedRowsLeavePendingSet() = runBlocking {
         dao.insertIgnore(
             (0 until 25).map { index ->
-                ResolverEntity(address = "10.20.${index / 250}.${index % 250 + 1}")
+                ResolverEntity(address = "10.20.${'${'}index / 250}.${'${'}index % 250 + 1}")
             }
         )
 
