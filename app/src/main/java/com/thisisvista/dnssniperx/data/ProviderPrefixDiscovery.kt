@@ -9,39 +9,23 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
-/**
- * Provider ASN seeds are intentionally narrow primary-origin seeds, not a complete
- * ISP ownership database. RIPEstat supplies current announced prefixes; prefixes are
- * intersected with RIPE's IR allocations before they become provider candidates.
- */
+/** Maps reviewed provider ASN seeds to current RIPEstat-announced IPv4 prefixes. */
 object ProviderPrefixDiscovery {
     private const val RIPESTAT_HOST = "stat.ripe.net"
     private const val CONNECT_TIMEOUT_MS = 12_000
     private const val READ_TIMEOUT_MS = 20_000
     private const val MAX_RESPONSE_CHARS = 5_000_000
-
     const val RIPESTAT_SOURCE_ID_PREFIX = "ripestat-asn-prefix-"
 
-    data class AsnSeed(
-        val providerId: String,
-        val displayName: String,
-        val asn: Int,
-        val reference: String = "https://github.com/Kiya6955/IR-ISP-Blocker"
-    )
-
+    data class AsnSeed(val providerId: String, val displayName: String, val asn: Int,
+                       val reference: String = "https://github.com/Kiya6955/IR-ISP-Blocker")
     data class ProviderPrefix(val providerId: String, val asn: Int, val cidr: IranPrefixDiscovery.CidrBlock)
+    data class Candidate(val address: String, val cidr: String, val providerId: String, val asn: Int,
+                         val ownershipStatus: String = OwnershipStatus.CANDIDATE)
+    data class Batch(val candidates: List<Candidate>, val nextOffset: Long, val totalCandidates: Long,
+                     val complete: Boolean)
 
-    data class Candidate(
-        val address: String,
-        val cidr: String,
-        val providerId: String,
-        val asn: Int,
-        val ownershipStatus: String = OwnershipStatus.CANDIDATE
-    )
-
-    data class Batch(val candidates: List<Candidate>, val nextOffset: Long, val totalCandidates: Long, val complete: Boolean)
-
-    /** Primary ASN seeds; update only after checking the current holder and routing data. */
+    /** Primary ASN seeds only; this is not a complete provider ownership database. */
     val asnSeeds = listOf(
         AsnSeed("mci", "همراه اول", 197207),
         AsnSeed("irancell", "ایرانسل", 44244),
@@ -76,8 +60,9 @@ object ProviderPrefixDiscovery {
             try {
                 require(url.protocol == "https" && url.host == RIPESTAT_HOST && url.port in listOf(-1, 443))
                 check(connection.responseCode == HttpURLConnection.HTTP_OK) { "RIPEstat failed for AS${seed.asn}" }
-                val declared = connection.contentLengthLong
-                require(declared <= MAX_RESPONSE_CHARS) { "RIPEstat response exceeded size limit" }
+                require(connection.contentLengthLong <= MAX_RESPONSE_CHARS.toLong()) {
+                    "RIPEstat response exceeded size limit"
+                }
                 val body = StringBuilder()
                 BufferedReader(InputStreamReader(connection.inputStream, StandardCharsets.UTF_8)).use { reader ->
                     val buffer = CharArray(8_192)
@@ -98,7 +83,7 @@ object ProviderPrefixDiscovery {
                     if (prefixText.contains(':')) continue
                     val prefix = IranPrefixDiscovery.parseCidr(prefixText) ?: continue
                     intersectWithIran(prefix, iranRanges).forEach { block ->
-                        mapped["${block.asText()}"] = ProviderPrefix(seed.providerId, seed.asn, block)
+                        mapped[block.asText()] = ProviderPrefix(seed.providerId, seed.asn, block)
                     }
                     require(mapped.size <= 20_000) { "Provider prefix count exceeded safety limit" }
                 }
@@ -110,7 +95,6 @@ object ProviderPrefixDiscovery {
         result
     }
 
-    /** Intersect BGP-announced CIDRs with current IR delegated IPv4 allocations. */
     fun intersectWithIran(
         prefix: IranPrefixDiscovery.CidrBlock,
         iranRanges: List<IranPrefixDiscovery.Ipv4Range>
@@ -119,14 +103,11 @@ object ProviderPrefixDiscovery {
         iranRanges.forEach { range ->
             val start = maxOf(prefix.network, range.start)
             val end = minOf(prefix.endInclusive, range.endInclusive)
-            if (start <= end) {
-                intersections += IranPrefixDiscovery.toCidrs(IranPrefixDiscovery.Ipv4Range(start, end))
-            }
+            if (start <= end) intersections += IranPrefixDiscovery.toCidrs(IranPrefixDiscovery.Ipv4Range(start, end))
         }
         return intersections.distinctBy { it.asText() }.sortedBy { it.network }
     }
 
-    /** Stable per-prefix sample order makes the offset safe to persist and resume. */
     fun sampleBatch(
         prefixes: List<ProviderPrefix>,
         samplesPerPrefix: Int = IranPrefixDiscovery.DEFAULT_SAMPLES_PER_PREFIX,
@@ -147,12 +128,9 @@ object ProviderPrefixDiscovery {
         for (prefix in eligible) {
             for (sampleIndex in 0 until samplesPerPrefix) {
                 if (cursor >= offset && cursor < end) {
-                    val value = sampleAddress(prefix.cidr, sampleIndex, samplesPerPrefix)
                     candidates += Candidate(
-                        IranPrefixDiscovery.toIpv4(value),
-                        prefix.cidr.asText(),
-                        prefix.providerId,
-                        prefix.asn
+                        IranPrefixDiscovery.toIpv4(sampleAddress(prefix.cidr, sampleIndex, samplesPerPrefix)),
+                        prefix.cidr.asText(), prefix.providerId, prefix.asn
                     )
                 }
                 cursor++

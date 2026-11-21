@@ -35,7 +35,7 @@ object IranPrefixRegistryClient {
         try {
             val status = connection.responseCode
             check(status == HttpURLConnection.HTTP_OK) { "RIPE source returned HTTP $status" }
-            require(connection.contentLengthLong <= MAX_FILE_CHARS) { "RIPE source exceeded the size limit" }
+            require(connection.contentLengthLong <= MAX_FILE_CHARS.toLong()) { "RIPE source exceeded the size limit" }
 
             val ranges = LinkedHashSet<IranPrefixDiscovery.Ipv4Range>()
             var charsRead = 0
