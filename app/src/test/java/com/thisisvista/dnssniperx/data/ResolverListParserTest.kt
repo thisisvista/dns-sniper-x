@@ -106,6 +106,17 @@ class ResolverListParserTest {
         assertTrue(result.all { it.status == "NOT_TESTED" })
     }
 
+    @Test fun importsIpv6FromWhiteDnsDetailedTxtReport() {
+        val result = ResolverListParser.parse(
+            "2001:4860:4860::8888  status=valid  score=6/6  tunnel=true"
+        )
+
+        assertEquals(1, result.size)
+        assertEquals("2001:4860:4860::8888", result.single().address)
+        assertEquals(53, result.single().port)
+        assertEquals("NOT_TESTED", result.single().status)
+    }
+
     @Test fun importsWhiteDnsPassedRawTxtLinesAsUntestedCandidates() {
         val result = ResolverListParser.parse(
             "1.1.1.1\n8.8.8.8\n1.1.1.1",
