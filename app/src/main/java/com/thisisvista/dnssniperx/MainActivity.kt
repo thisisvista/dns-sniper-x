@@ -65,6 +65,9 @@ import com.thisisvista.dnssniperx.data.DotHistoryEntity
 import com.thisisvista.dnssniperx.data.DotProbeResult
 import com.thisisvista.dnssniperx.data.DohHistoryEntity
 import com.thisisvista.dnssniperx.data.ResolverCollector
+import com.thisisvista.dnssniperx.data.ProviderDiscoveryCoordinator
+import com.thisisvista.dnssniperx.data.ProviderPrefixDiscovery
+import com.thisisvista.dnssniperx.data.IranPrefixDiscovery
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.ResolverDatabase
 import com.thisisvista.dnssniperx.data.ResolverEntity
@@ -370,6 +373,26 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     termsNote = null
                                 )
                             })
+                            // Discover a bounded page of Iran-based provider ASN candidates
+                            // on the existing explicit collection action. Candidates remain
+                            // NOT_TESTED until the user starts the normal DNS scan.
+                            var providerDiscovery: ProviderDiscoveryCoordinator.Summary? = null
+                            var providerDiscoveryError: String? = null
+                            try {
+                                providerDiscovery = ProviderDiscoveryCoordinator(dao).discoverNextBatch(
+                                    providerIds = ProviderPrefixDiscovery.asnSeeds.mapTo(linkedSetOf()) { it.providerId },
+                                    batchSize = IranPrefixDiscovery.DEFAULT_BATCH_SIZE
+                                )
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (exception: Exception) {
+                                providerDiscoveryError = exception.message?.take(160) ?: "Provider discovery unavailable"
+                                AppLogger.record(
+                                    dao, context, "WARN", "provider-discovery",
+                                    "Provider ASN candidate discovery failed", exception,
+                                    stage = "discover"
+                                )
+                            }
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
                                 if (result.error == null) "${result.source}: ${result.found}" else "${result.source}: unavailable"
@@ -379,6 +402,12 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                 if (failures.isNotEmpty()) append(" ${failures.size} source(s) could not be reached.")
                                 append("\\n").append(sourceReport)
                                 if (summary.found > summary.inserted) append("\\nExisting duplicates or repeated entries were skipped.")
+                                providerDiscovery?.let { discovery ->
+                                    append("\\nProvider discovery: saved ${discovery.newlySaved} new candidates from ${discovery.providerCount} provider seeds; ${discovery.nextOffset}/${discovery.totalCandidates} sampled.")
+                                    if (!discovery.complete) append(" Run collection again to continue this bounded discovery.")
+                                    else append(" Provider candidate discovery is complete.")
+                                }
+                                providerDiscoveryError?.let { append("\\nProvider discovery postponed: $it") }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
