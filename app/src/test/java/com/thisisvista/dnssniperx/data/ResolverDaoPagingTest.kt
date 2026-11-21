@@ -37,6 +37,25 @@ class ResolverDaoPagingTest {
     }
 
     @Test
+    fun insertOrMergeSourcesInsertsBatchAndPreservesDuplicateProvenance() = runBlocking {
+        val inserted = dao.insertOrMergeSources(
+            listOf(
+                ResolverEntity(address = "1.1.1.1", source = "iran-directory"),
+                ResolverEntity(address = "1.1.1.1", source = "global-directory"),
+                ResolverEntity(address = "1.1.1.1", source = "public-dns-info"),
+                ResolverEntity(address = "8.8.8.8", source = "global-directory")
+            )
+        )
+
+        assertEquals(2, inserted)
+        val rows = page(offset = 0)
+        val iranResolver = rows.single { it.address == "1.1.1.1" }
+        assertEquals("iran-directory", iranResolver.source)
+        assertEquals("global-directory\npublic-dns-info", iranResolver.additionalSources)
+        assertEquals(2, rows.size)
+    }
+
+    @Test
     fun resolverPagesAreBoundedAndCoverEveryMatchingRow() = runBlocking {
         val entries = (0 until 205).map { index ->
             ResolverEntity(address = "10.1.${index / 254}.${index % 254 + 1}", collectedAt = index.toLong())

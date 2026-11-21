@@ -429,14 +429,20 @@ interface ResolverDao {
 
     @Transaction
     suspend fun insertOrMergeSources(resolvers: List<ResolverEntity>): Int {
+        if (resolvers.isEmpty()) return 0
+
+        // Insert the bounded collection batch in one DAO call instead of invoking
+        // Room once per row. IGNORE returns -1 for endpoints already in the table
+        // (including duplicates earlier in this same batch).
+        val insertedIds = insertIgnore(resolvers)
         var insertedCount = 0
-        for (resolver in resolvers) {
-            val insertedId = insertIgnore(listOf(resolver)).firstOrNull() ?: -1L
+        resolvers.forEachIndexed { index, resolver ->
+            val insertedId = insertedIds.getOrNull(index) ?: -1L
             if (insertedId != -1L) {
                 insertedCount++
-                continue
+                return@forEachIndexed
             }
-            val existing = findByEndpoint(resolver.address, resolver.port) ?: continue
+            val existing = findByEndpoint(resolver.address, resolver.port) ?: return@forEachIndexed
             val mergedSources = (existing.additionalSources.lineSequence() +
                 sequenceOf(resolver.source) +
                 resolver.additionalSources.lineSequence())
