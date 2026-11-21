@@ -100,7 +100,8 @@ object DnsProbe {
                 baseResult
             } else {
                 val withEdnsDiagnostic = addEdnsPayloadDiagnostic(address, resolver.port, useTcp, baseResult)
-                addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
+                val withNxDomainDiagnostic = addNxDomainDiagnostic(address, resolver.port, useTcp, withEdnsDiagnostic)
+                addRecursionDiagnostic(address, resolver.port, useTcp, withNxDomainDiagnostic)
             }
         } catch (_: SocketTimeoutException) {
             ProbeResult("TIMEOUT", detail = "No DNS response before timeout")
@@ -154,6 +155,28 @@ object DnsProbe {
             }
         }
         return appendDiagnostic(base, diagnostic)
+    }
+
+    /**
+     * Records the resolver's RA/AA flags. RA advertises recursion availability;
+     * it is not proof that arbitrary recursive lookups succeed.
+     */
+    private fun addRecursionDiagnostic(
+        address: InetAddress, port: Int, useTcp: Boolean, base: ProbeResult
+    ): ProbeResult {
+        return try {
+            val query = DnsPacket.buildQuery(TEST_NAME, Random.nextInt(0, 65_536), includeEdns = false)
+            val response = if (useTcp) tcpQuery(address, port, query) else udpQuery(address, port, query)
+            val info = DnsPacket.validateResponse(query, response)
+            val diagnostic = when {
+                info.recursionAvailable -> "Recursion advertised (RA flag set; recursive resolution is not independently proven)"
+                info.authoritativeAnswer -> "Authoritative answer (AA flag set); recursive service not confirmed"
+                else -> "RA flag not set; recursive service not confirmed"
+            }
+            appendDiagnostic(base, diagnostic)
+        } catch (exception: Exception) {
+            appendDiagnostic(base, "Recursion flag check unavailable: ${exception.message?.take(70) ?: "network error"}")
+        }
     }
 
     /**
