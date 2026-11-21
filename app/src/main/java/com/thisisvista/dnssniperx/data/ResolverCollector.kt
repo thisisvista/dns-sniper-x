@@ -2,6 +2,7 @@ package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -109,6 +110,9 @@ object ResolverCollector {
                 }
                 flushBatch()
             } catch (cancelled: CancellationException) {
+                // Preserve the partial batch before propagating cancellation so
+                // a stopped/interrupted collection can safely resume later.
+                withContext(NonCancellable) { flushBatch() }
                 throw cancelled
             } catch (exception: Exception) {
                 // Keep already received rows even if a source fails partway through.

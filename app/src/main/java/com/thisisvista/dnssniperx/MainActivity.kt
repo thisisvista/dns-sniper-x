@@ -338,6 +338,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                 append("\\n").append(sourceReport)
                                 if (summary.found > summary.inserted) append("\\nExisting duplicates or repeated entries were skipped.")
                             }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
                         } catch (exception: Exception) {
                             message = "Collection failed: ${exception.message ?: "Unknown error"}"
                         } finally {
