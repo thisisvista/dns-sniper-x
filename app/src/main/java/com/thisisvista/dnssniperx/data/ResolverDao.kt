@@ -524,6 +524,19 @@ interface ResolverDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertResolverEvidenceRows(evidence: List<ResolverEvidenceEntity>)
 
+    /** Persist candidate rows, their RIPEstat sources and evidence as one atomic batch. */
+    @Transaction
+    suspend fun persistProviderDiscoveryBatch(
+        resolvers: List<ResolverEntity>,
+        sources: List<ResolverSourceEntity>,
+        evidence: List<ResolverEvidenceEntity>
+    ): Int {
+        val inserted = insertOrMergeSources(resolvers)
+        sources.forEach { upsertResolverSource(it) }
+        if (evidence.isNotEmpty()) insertResolverEvidenceRows(evidence)
+        return inserted
+    }
+
     @Query("SELECT * FROM resolver_evidence WHERE address = :address AND port = :port ORDER BY collectedAt DESC, id DESC")
     suspend fun getResolverEvidence(address: String, port: Int): List<ResolverEvidenceEntity>
 
