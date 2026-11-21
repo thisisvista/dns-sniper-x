@@ -53,8 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.AppLogger
 import com.thisisvista.dnssniperx.data.ActiveNetworkMonitor
-import com.thisisvista.dnssniperx.data.ActiveNetworkState
-import com.thisisvista.dnssniperx.data.ActiveNetworkTransport
 import com.thisisvista.dnssniperx.data.ResolverEvidenceEntity
 import com.thisisvista.dnssniperx.data.EvidenceType
 import com.thisisvista.dnssniperx.data.OwnershipStatus
@@ -95,14 +93,6 @@ class MainActivity : ComponentActivity() {
 private fun DnsSniperXApp(dao: ResolverDao) {
     var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
     LaunchedEffect(dao) { dao.observeResolverInvalidation().debounce(750).collect { resolverRefreshToken++ } }
-    val providers by dao.observeProviders().collectAsState(initial = emptyList())
-    val networkMonitor = androidx.compose.runtime.remember(context) { ActiveNetworkMonitor(context) }
-    val activeNetwork by networkMonitor.state.collectAsState()
-    SideEffect { networkMonitor.updateProviders(providers) }
-    DisposableEffect(networkMonitor) {
-        networkMonitor.start()
-        onDispose { networkMonitor.stop() }
-    }
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
@@ -124,6 +114,14 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val providers by dao.observeProviders().collectAsState(initial = emptyList())
+    val networkMonitor = androidx.compose.runtime.remember(context) { ActiveNetworkMonitor(context) }
+    val activeNetwork by networkMonitor.state.collectAsState()
+    SideEffect { networkMonitor.updateProviders(providers) }
+    DisposableEffect(networkMonitor) {
+        networkMonitor.start()
+        onDispose { networkMonitor.stop() }
+    }
     val txtExportPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
