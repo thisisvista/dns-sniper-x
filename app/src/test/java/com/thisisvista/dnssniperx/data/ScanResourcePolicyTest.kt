@@ -35,4 +35,10 @@ class ScanResourcePolicyTest {
     @Test fun mediumBatteryReducesConcurrency() {
         assertEquals(2, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_NONE, 30, false))
     }
+    @Test fun unknownBatteryLevelUsesMinimumConcurrency() {
+        assertEquals(1, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_NONE, -1, false))
+    }
+    @Test fun invalidBatteryLevelUsesMinimumConcurrency() {
+        assertEquals(1, ScanResourcePolicy.recommendedParallelism(PowerManager.THERMAL_STATUS_NONE, 101, false))
+    }
 }

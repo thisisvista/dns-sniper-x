@@ -384,7 +384,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                                 val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                                 val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                                    .takeIf { it in 0..100 } ?: 100
+                                    .takeIf { it in 0..100 } ?: -1
                                 val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                     powerManager.currentThermalStatus
                                 } else {
