@@ -1,6 +1,5 @@
 package com.thisisvista.dnssniperx
 
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -46,7 +45,7 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).assertExists()
+        composeRule.onNodeWithText(address).fetchSemanticsNode()
 
         // Importing the same endpoint again must not create a second library row.
         composeRule.onNodeWithText("DNS addresses")
