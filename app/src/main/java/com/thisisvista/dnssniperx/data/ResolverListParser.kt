@@ -10,13 +10,18 @@ object ResolverListParser {
     private val hostnamePattern = Regex("^(?=.{1,254}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$")
     private val ipv4Pattern = Regex("^(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
     private val csvHeaderValues = setOf("ip", "ip_address", "address", "resolver", "dns", "nameserver", "name_server", "server", "host")
+    // WhiteDNS detailed TXT reports use lines such as:
+    // "1.2.3.4  status=valid  score=6/6 ...". Import the endpoint as an
+    // untested candidate; the report's verdict is historical and must be rechecked.
+    private val whiteDnsDetailLine = Regex("^((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})(?:\\s+status=)", RegexOption.IGNORE_CASE)
 
     fun parse(text: String, source: String = "manual"): List<ResolverEntity> {
         val now = System.currentTimeMillis()
         return text.lineSequence()
             .map { it.removePrefix("\uFEFF").substringBefore("#").trim() }
             .filter { it.isNotEmpty() }
-            .mapNotNull { line ->
+            .mapNotNull { rawLine ->
+                val line = whiteDnsDetailLine.find(rawLine)?.groupValues?.get(1) ?: rawLine
                 val columns = line.split(',', limit = 3)
                 val address = columns.first().trim().removeSurrounding("\"")
                 if (address.lowercase() in csvHeaderValues) return@mapNotNull null
