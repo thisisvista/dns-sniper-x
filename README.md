@@ -4,7 +4,7 @@ DNS SniperX is an independent Android app for collecting public DNS resolver can
 
 ## Current implementation
 
-- Android app with a local Room database (schema version 8) for resolver entries, scan history, DoH/DoT history, source-collection history, and tunnel-profile metadata.
+- Android app with a local Room database (schema version 9) for resolver entries, scan history, DoH/DoT history, source-collection history, tunnel-profile metadata, and bounded diagnostic logs.
 - Public resolver collection over HTTPS from a reviewed host allowlist. Sources are fetched sequentially; responses are streamed line-by-line and parsed records are persisted in batches of up to 500.
 - Collection enforces connection/read timeouts, redirect-host restrictions, per-source character and line limits, and a maximum line length. A partial batch is saved when collection is cancelled or a source fails.
 - Duplicate resolver endpoints are merged while retaining source provenance.
@@ -12,6 +12,8 @@ DNS SniperX is an independent Android app for collecting public DNS resolver can
 - DNS scanning tests UDP and TCP independently. The app schedules small scan batches (10 entries) and adapts parallelism to thermal state, battery level, and power-saver mode. Normal operation uses up to 4 concurrent resolvers; the probe engine has a hard concurrency ceiling of 8.
 - Completed scan results are persisted individually so a pause or interruption does not discard already completed probes. Scanning supports progress, pause/resume, and retry of unsuccessful results.
 - Search, sorting, filtering, and incremental display keep the full resolver library out of the UI's working set.
+- The collection screen lets users choose which reviewed public sources to fetch; source URLs remain governed by the fixed HTTPS host and redirect allowlist.
+- Settings includes searchable, redacted local diagnostic logs and an in-app privacy/network-use disclosure. No automatic database or log upload is implemented.
 - Baseline DNS checks use `example.com A`. Extended diagnostics include EDNS payload checks and randomized names under the reserved `.invalid` TLD; these run only after a valid baseline response.
 - Separate DoH (DNS over HTTPS) and DoT (DNS over TLS) connectivity diagnostics and histories are available. These checks do not establish tunnel compatibility.
 - General TXT export retains non-default ports and formats IPv6 endpoints with brackets. A dedicated SlipNet scanner export emits only unique working IPv4 resolvers on port 53, one IP per line.
@@ -65,6 +67,10 @@ General TXT export provides resolver endpoints (IP or IP:port, with bracketed IP
 ## Tunnel implementation status
 
 The current tunnel-related code stores and validates profile metadata for DNSTT and Slipstream, protects secret material with an Android Keystore-backed AES-GCM vault, and tests lifecycle state transitions. It does **not** yet contain the native tunnel clients, Android `VpnService` routing, secure end-to-end provisioning, or a completed connection flow. A profile being saved or validated must never be presented as a working tunnel.
+
+## Privacy and network use
+
+The app makes network requests only when the user starts collection, DNS scanning, or DoH/DoT diagnostics. Collection downloads the selected public lists from reviewed source hosts. DNS scans send test queries to the resolver endpoints being checked; DoH/DoT checks contact their configured diagnostic providers. Android's active network type and exposed DNS servers are read to label results. Resolver data, histories, and diagnostic logs are stored in the app's local database. There is no automatic upload of the database or logs, and no background resolver collection. TXT exports are user-initiated; review diagnostic exports before sharing them.
 
 ## Not implemented yet
 

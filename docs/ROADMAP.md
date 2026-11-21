@@ -54,5 +54,5 @@
 ## Stage 6 — Release readiness
 - [x] Automated unit tests and debug APK CI artifact.
 - [ ] Complete physical-device/API-level and Wi-Fi/mobile network tests (Keystore vault instrumentation is covered by CI).
-- [ ] Privacy/network-use disclosures.
+- [x] In-app privacy/network-use disclosures and README documentation.
 - [ ] Signed release build and release notes.

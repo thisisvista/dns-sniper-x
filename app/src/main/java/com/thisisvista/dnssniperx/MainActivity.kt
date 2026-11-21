@@ -979,6 +979,7 @@ private fun HomeContent(
         }
 
         DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
+        PrivacyDisclosureSection()
 
         Text(
             "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
@@ -1046,6 +1047,52 @@ private fun DiagnosticsLogsSection(dao: ResolverDao, onExport: () -> Unit, onCle
     }
 }
 
+
+@Composable
+private fun PrivacyDisclosureSection() {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Settings · Privacy & network use", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Resolver data, scan results, histories, and diagnostic logs are stored locally on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (expanded) "Hide privacy details" else "Review privacy & network details")
+            }
+            if (expanded) {
+                Text("When the app uses the network", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Network requests are made when you start an action: collecting selected public resolver lists, scanning resolver candidates, or running DoH/DoT provider checks. The app does not run background resolver collection.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("What is sent", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Collection downloads public lists from the reviewed source hosts. A DNS scan sends DNS test queries (including example.com and, for extended diagnostics, randomized .invalid names) to the resolvers being tested. DoH and DoT checks contact their configured test providers. Android network information is read to label the active connection and its exposed DNS servers.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("Local storage and sharing", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Resolver entries, scan outcomes, collection and provider histories, and diagnostic logs are kept in the app's local database. The app does not automatically upload this database or its logs. TXT exports happen only when you request an export and choose a destination. Review exported logs before sharing them, even though known secret-like values and URL query strings are redacted.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("Important limitations", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Imported resolver lists are parsed and stored locally; they are contacted only if you later run a scan. A successful DNS response does not establish privacy, censorship circumvention, or tunnel connectivity.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
 
 private fun formatResolverEndpoint(address: String, port: Int, includeDefaultPort: Boolean = true): String {
     val host = if (address.contains(':')) "[$address]" else address
