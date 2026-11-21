@@ -390,6 +390,37 @@ interface ResolverDao {
         note: String?
     )
 
+    /**
+     * Persists the scan history row and current resolver status atomically.
+     * A failed write cannot leave history and resolver state out of sync.
+     */
+    @Transaction
+    suspend fun saveScanResult(
+        history: ScanHistoryEntity,
+        resolverId: Long,
+        udpStatus: String,
+        udpLatencyMs: Long?,
+        tcpStatus: String,
+        tcpLatencyMs: Long?,
+        testedAt: Long,
+        overallStatus: String,
+        bestLatency: Long?,
+        note: String?
+    ) {
+        insertHistory(history)
+        updateScanResult(
+            id = resolverId,
+            udpStatus = udpStatus,
+            udpLatencyMs = udpLatencyMs,
+            tcpStatus = tcpStatus,
+            tcpLatencyMs = tcpLatencyMs,
+            testedAt = testedAt,
+            overallStatus = overallStatus,
+            bestLatency = bestLatency,
+            note = note
+        )
+    }
+
     @Query("SELECT * FROM resolvers WHERE address = :address AND port = :port LIMIT 1")
     suspend fun findByEndpoint(address: String, port: Int): ResolverEntity?
 

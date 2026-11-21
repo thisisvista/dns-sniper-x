@@ -416,25 +416,24 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     }
                                     val notes = DnsProbe.buildDiagnosticNote(result.udp.detail, result.tcp.detail)
                                     val historyResolver = batch.firstOrNull { it.id == result.resolverId }
-                                    dao.insertHistory(
-                                        ScanHistoryEntity(
+                                    val testedAt = System.currentTimeMillis()
+                                    dao.saveScanResult(
+                                        history = ScanHistoryEntity(
                                             resolverAddress = historyResolver?.address ?: "Unknown",
                                             resolverPort = historyResolver?.port ?: 53,
-                                            testedAt = System.currentTimeMillis(),
+                                            testedAt = testedAt,
                                             udpStatus = result.udp.status,
                                             udpLatencyMs = result.udp.latencyMs,
                                             tcpStatus = result.tcp.status,
                                             tcpLatencyMs = result.tcp.latencyMs,
                                             scanMode = if (retryUnsuccessful) "RETRY" else "SCAN"
-                                        )
-                                    )
-                                    dao.updateScanResult(
-                                        id = result.resolverId,
+                                        ),
+                                        resolverId = result.resolverId,
                                         udpStatus = result.udp.status,
                                         udpLatencyMs = result.udp.latencyMs,
                                         tcpStatus = result.tcp.status,
                                         tcpLatencyMs = result.tcp.latencyMs,
-                                        testedAt = System.currentTimeMillis(),
+                                        testedAt = testedAt,
                                         overallStatus = overall,
                                         bestLatency = best,
                                         note = notes
