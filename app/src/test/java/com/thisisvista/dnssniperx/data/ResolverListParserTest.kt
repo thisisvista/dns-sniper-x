@@ -73,6 +73,31 @@ class ResolverListParserTest {
         assertTrue(result.isEmpty())
     }
 
+    @Test fun importsWhiteDnsResolverCsvRowsAsUntestedCandidates() {
+        val result = ResolverListParser.parse(
+            "ip,status,color,score,udp,tcp,tunnel_ready\n" +
+                "1.1.1.1,valid,green,6,true,true,true\n" +
+                "8.8.8.8,invalid,red,1,false,false,false"
+        )
+
+        assertEquals(listOf("1.1.1.1", "8.8.8.8"), result.map { it.address })
+        assertTrue(result.all { it.port == 53 })
+        assertTrue(result.all { it.status == "NOT_TESTED" })
+        assertTrue(result.all { it.source == "manual" })
+    }
+
+    @Test fun importsWhiteDnsPassedRawTxtLinesAsUntestedCandidates() {
+        val result = ResolverListParser.parse(
+            "1.1.1.1\n8.8.8.8\n1.1.1.1",
+            source = "whitedns-passed-raw"
+        )
+
+        assertEquals(listOf("1.1.1.1", "8.8.8.8"), result.map { it.address })
+        assertTrue(result.all { it.port == 53 })
+        assertTrue(result.all { it.status == "NOT_TESTED" })
+        assertTrue(result.all { it.source == "whitedns-passed-raw" })
+    }
+
     @Test fun acceptsFullyQualifiedHostnamesWithTrailingDot() {
         val result = ResolverListParser.parse(
             "resolver.example.\ndns.google.,53,US"
