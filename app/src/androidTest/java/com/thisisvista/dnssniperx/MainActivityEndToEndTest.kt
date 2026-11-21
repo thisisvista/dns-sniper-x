@@ -1,6 +1,6 @@
 package com.thisisvista.dnssniperx
 
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -46,7 +46,7 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).assertExists()
+        composeRule.onNodeWithText(address).assertIsDisplayed()
 
         // Importing the same endpoint again must not create a second library row.
         composeRule.onNodeWithText("DNS addresses")
@@ -61,7 +61,7 @@ class MainActivityEndToEndTest {
                 "No new entries. These DNS addresses are already saved."
             ).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("1 DNS entries saved on this device.").assertExists()
+        composeRule.onNodeWithText("1 DNS entries saved on this device.").assertIsDisplayed()
 
         // Recreate the real Activity: the saved record must still be loaded from Room.
         composeRule.activityRule.scenario.recreate()
@@ -69,6 +69,6 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).assertExists()
+        composeRule.onNodeWithText(address).assertIsDisplayed()
     }
 }
