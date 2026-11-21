@@ -44,7 +44,7 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
 
-      - name: Run Android Keystore instrumentation tests
+      - name: Run Android instrumentation and UI E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
           # GitHub-hosted runners may not expose nested KVM. Explicitly allow
@@ -64,6 +64,17 @@ jobs:
           disable-animations: true
           # The action waits for sys.boot_completed before running this command.
           script: ./gradlew connectedDebugAndroidTest
+
+      - name: Upload Android instrumentation and E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-android-test-reports
+          path: |
+            app/build/reports/androidTests/connected/debug/**
+            app/build/outputs/androidTest-results/connected/debug/**
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Build debug APK
         run: ./gradlew assembleDebug

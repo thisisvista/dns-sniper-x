@@ -53,6 +53,8 @@
 
 ## Stage 6 — Release readiness
 - [x] Automated unit tests and debug APK CI artifact.
-- [ ] Complete physical-device/API-level and Wi-Fi/mobile network tests (Keystore vault instrumentation is covered by CI).
+- [x] Add first emulator UI E2E smoke coverage for app launch, manual DNS import, duplicate prevention, and persistence across Activity recreation.
+- [ ] Extend UI E2E coverage to TXT document import, public collection, scan/pause/resume, and export flows.
+- [ ] Complete physical-device/API-level and Wi-Fi/mobile network tests (Keystore vault instrumentation and initial UI E2E are covered by CI).
 - [x] In-app privacy/network-use disclosures and README documentation.
 - [ ] Signed release build and release notes.
