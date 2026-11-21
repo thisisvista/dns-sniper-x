@@ -74,10 +74,17 @@ class ResolverListParserTest {
     }
 
     @Test fun importsWhiteDnsResolverCsvRowsAsUntestedCandidates() {
+        // Header and fields mirror WhiteDNS internal/dnsscan/report.go writeCSV.
         val result = ResolverListParser.parse(
-            "ip,status,color,score,udp,tcp,tunnel_ready\n" +
-                "1.1.1.1,valid,green,6,true,true,true\n" +
-                "8.8.8.8,invalid,red,1,false,false,false"
+            "ip,status,color,score,responded,udp,tcp,preferred_transport,fallback_transport," +
+                "udp_poisoned,tcp_poisoned,transport_disagreement,injection_observed,ra,aa,tc,rd," +
+                "rcodes,qd_records,an_records,edns,txt_pass,ns_records,ar_records,poisoned,poison_ip," +
+                "hijacked,hijack_confidence,hijack_reason,hijack_udp,hijack_tcp,hijack_checks," +
+                "hijack_anomalies,hijack_rcodes,hijack_ip,tunnel_ready,latency_ms,nearby,reason\n" +
+                "1.1.1.1,valid,green,6,true,true,true,udp,,false,false,false,false,true,false,false,true," +
+                "NOERROR,1,1,true,true,0,1,false,,false,none,,false,false,0,0,, ,true,12,false,clean\n" +
+                "8.8.8.8,invalid,red,1,false,false,false,,,false,false,false,false,false,false,false,true," +
+                "TIMEOUT,1,0,false,false,0,0,false,,false,none,,false,false,0,0,, ,false,0,false,timeout"
         )
 
         assertEquals(listOf("1.1.1.1", "8.8.8.8"), result.map { it.address })
