@@ -183,18 +183,22 @@ internal object DnsPacket {
                         }
                     }
                     16 -> {
-                        // TXT RDATA is a sequence of length-prefixed character strings.
-                        var txtOffset = dataStart
-                        val txtEnd = dataStart + dataLength
-                        while (txtOffset < txtEnd) {
-                            val segmentLength = packet[txtOffset].toInt() and 0xff
-                            txtOffset++
-                            require(txtOffset + segmentLength <= txtEnd) {
-                                "Truncated TXT character-string data"
+                        // TXT RDATA is relevant to TXT queries only. Ignore unrelated
+                        // RR payloads rather than interpreting them as the requested answer.
+                        if (queryType == 16) {
+                            // TXT RDATA is a sequence of length-prefixed character strings.
+                            var txtOffset = dataStart
+                            val txtEnd = dataStart + dataLength
+                            while (txtOffset < txtEnd) {
+                                val segmentLength = packet[txtOffset].toInt() and 0xff
+                                txtOffset++
+                                require(txtOffset + segmentLength <= txtEnd) {
+                                    "Truncated TXT character-string data"
+                                }
+                                txtOffset += segmentLength
                             }
-                            txtOffset += segmentLength
+                            if (dataLength > 0) txtOwners += owner.value.lowercase()
                         }
-                        if (dataLength > 0) txtOwners += owner.value.lowercase()
                     }
                 }
             }
