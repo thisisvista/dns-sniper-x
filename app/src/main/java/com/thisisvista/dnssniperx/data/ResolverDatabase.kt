@@ -194,13 +194,13 @@ abstract class ResolverDatabase : RoomDatabase() {
                 }
 
                 val sources = listOf(
-                    arrayOf<Any>("iran-public-dns-directory", "Iran public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt", "IR", "COMMUNITY"),
-                    arrayOf<Any>("public-dns-info", "Public DNS Info", "PUBLIC_DIRECTORY", "https://public-dns.info/nameservers.csv", "ZZ", "COMMUNITY"),
-                    arrayOf<Any>("trickest-resolvers", "Trickest Resolvers", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt", "ZZ", "COMMUNITY"),
-                    arrayOf<Any>("global-public-dns-directory", "Global public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt", "ZZ", "COMMUNITY"),
-                    arrayOf<Any>("current-network", "DNS servers exposed by the active Android network", "NETWORK_DISCOVERY", null, "ZZ", "OBSERVED"),
-                    arrayOf<Any>("manual", "Manual DNS entry", "USER_INPUT", null, "ZZ", "USER_PROVIDED"),
-                    arrayOf<Any>("txt-import", "Imported TXT file", "USER_INPUT", null, "ZZ", "USER_PROVIDED")
+                    arrayOf<Any?>("iran-public-dns-directory", "Iran public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt", "IR", "COMMUNITY"),
+                    arrayOf<Any?>("public-dns-info", "Public DNS Info", "PUBLIC_DIRECTORY", "https://public-dns.info/nameservers.csv", "ZZ", "COMMUNITY"),
+                    arrayOf<Any?>("trickest-resolvers", "Trickest Resolvers", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt", "ZZ", "COMMUNITY"),
+                    arrayOf<Any?>("global-public-dns-directory", "Global public DNS directory", "PUBLIC_DIRECTORY", "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt", "ZZ", "COMMUNITY"),
+                    arrayOf<Any?>("current-network", "DNS servers exposed by the active Android network", "NETWORK_DISCOVERY", null, "ZZ", "OBSERVED"),
+                    arrayOf<Any?>("manual", "Manual DNS entry", "USER_INPUT", null, "ZZ", "USER_PROVIDED"),
+                    arrayOf<Any?>("txt-import", "Imported TXT file", "USER_INPUT", null, "ZZ", "USER_PROVIDED")
                 )
                 sources.forEach { row ->
                     database.execSQL(
