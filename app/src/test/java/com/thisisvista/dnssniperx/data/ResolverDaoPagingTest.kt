@@ -122,7 +122,7 @@ class ResolverDaoPagingTest {
             }
         )
 
-        val firstBatch = dao.getPendingScanBatch(retryUnsuccessful = false, afterId = 0L, limit = 10)
+        val firstBatch = dao.getPendingScanBatch(retryUnsuccessful = false, sourceFilter = "ALL", afterId = 0L, limit = 10)
         assertEquals(10, firstBatch.size)
         firstBatch.forEach { resolver ->
             dao.updateScanResult(
@@ -140,11 +140,13 @@ class ResolverDaoPagingTest {
 
         val secondBatch = dao.getPendingScanBatch(
             retryUnsuccessful = false,
+            sourceFilter = "ALL",
             afterId = firstBatch.last().id,
             limit = 10
         )
         val thirdBatch = dao.getPendingScanBatch(
             retryUnsuccessful = false,
+            sourceFilter = "ALL",
             afterId = secondBatch.last().id,
             limit = 10
         )
@@ -152,7 +154,28 @@ class ResolverDaoPagingTest {
         assertEquals(10, secondBatch.size)
         assertEquals(5, thirdBatch.size)
         assertEquals(25, (firstBatch + secondBatch + thirdBatch).map { it.id }.distinct().size)
-        assertEquals(15, dao.countPendingScan(retryUnsuccessful = false))
+        assertEquals(15, dao.countPendingScan(retryUnsuccessful = false, sourceFilter = "ALL"))
+    }
+
+    @Test
+    fun scanSourceFilterSeparatesManualTxtAndPublicResolvers() = runBlocking {
+        dao.insertIgnore(
+            listOf(
+                ResolverEntity(address = "10.0.0.1", source = "manual"),
+                ResolverEntity(address = "10.0.0.2", source = "txt-import"),
+                ResolverEntity(address = "10.0.0.3", source = "iran-public-dns-directory"),
+                ResolverEntity(address = "10.0.0.4", source = "public-dns-info")
+            )
+        )
+
+        val manual = dao.getPendingScanBatch(false, "MANUAL", 0L, 10)
+        val public = dao.getPendingScanBatch(false, "PUBLIC", 0L, 10)
+
+        assertEquals(listOf("10.0.0.1", "10.0.0.2"), manual.map { it.address })
+        assertEquals(listOf("10.0.0.3", "10.0.0.4"), public.map { it.address })
+        assertEquals(2, dao.countPendingScan(false, "MANUAL"))
+        assertEquals(2, dao.countPendingScan(false, "PUBLIC"))
+        assertEquals(4, dao.countPendingScan(false, "ALL"))
     }
 
     @Test
