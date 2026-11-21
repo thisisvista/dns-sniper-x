@@ -97,7 +97,9 @@ internal object DnsPacket {
             return ResponseInfo(
                 "TRUNCATED",
                 "DNS response is truncated (TC flag set); answers: ${answerCount}; remaining records may be incomplete",
-                responseCode
+                responseCode,
+                recursionAvailable,
+                authoritativeAnswer
             )
         }
 
@@ -113,11 +115,11 @@ internal object DnsPacket {
             16 -> "BADVERS"
             else -> "RCODE_${responseCode}"
         }
-        val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${metadata.description}"
+        val detail = "DNS response: ${responseCodeName} (RCODE ${responseCode}), answers: ${answerCount}; ${metadata.description}; recursionAvailable=${recursionAvailable}; authoritativeAnswer=${authoritativeAnswer}"
         return when {
-            responseCode != 0 -> ResponseInfo("DNS_ERROR", detail, responseCode)
-            answerCount == 0 || !metadata.hasRelevantAnswer -> ResponseInfo("NO_ANSWER", "${detail}; no answer matching the requested type or CNAME", responseCode)
-            else -> ResponseInfo("PASS", detail, responseCode)
+            responseCode != 0 -> ResponseInfo("DNS_ERROR", detail, responseCode, recursionAvailable, authoritativeAnswer)
+            answerCount == 0 || !metadata.hasRelevantAnswer -> ResponseInfo("NO_ANSWER", "${detail}; no answer matching the requested type or CNAME", responseCode, recursionAvailable, authoritativeAnswer)
+            else -> ResponseInfo("PASS", detail, responseCode, recursionAvailable, authoritativeAnswer)
         }
     }
 
