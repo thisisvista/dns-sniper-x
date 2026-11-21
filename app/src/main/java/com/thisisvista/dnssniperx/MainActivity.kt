@@ -39,6 +39,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +52,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.AppLogger
+import com.thisisvista.dnssniperx.data.ActiveNetworkMonitor
+import com.thisisvista.dnssniperx.data.ActiveNetworkState
+import com.thisisvista.dnssniperx.data.ActiveNetworkTransport
+import com.thisisvista.dnssniperx.data.ResolverEvidenceEntity
+import com.thisisvista.dnssniperx.data.EvidenceType
+import com.thisisvista.dnssniperx.data.OwnershipStatus
 import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.ScanResourcePolicy
 import com.thisisvista.dnssniperx.data.DohProbe
@@ -87,6 +95,14 @@ class MainActivity : ComponentActivity() {
 private fun DnsSniperXApp(dao: ResolverDao) {
     var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
     LaunchedEffect(dao) { dao.observeResolverInvalidation().debounce(750).collect { resolverRefreshToken++ } }
+    val providers by dao.observeProviders().collectAsState(initial = emptyList())
+    val networkMonitor = androidx.compose.runtime.remember(context) { ActiveNetworkMonitor(context) }
+    val activeNetwork by networkMonitor.state.collectAsState()
+    SideEffect { networkMonitor.updateProviders(providers) }
+    DisposableEffect(networkMonitor) {
+        networkMonitor.start()
+        onDispose { networkMonitor.stop() }
+    }
     val count by dao.observeCount().collectAsState(initial = 0)
     val recentHistory by dao.observeRecentHistory().collectAsState(initial = emptyList())
     val recentDohHistory by dao.observeRecentDohHistory().collectAsState(initial = emptyList())
@@ -294,28 +310,37 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             onCollectNetworkDns = { provider ->
                 scope.launch {
                     try {
-                        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                        val network: Network? = connectivity.activeNetwork
-                        val properties: LinkProperties? = network?.let { connectivity.getLinkProperties(it) }
-                        val capabilities: NetworkCapabilities? = network?.let { connectivity.getNetworkCapabilities(it) }
-                        val networkType = when {
-                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true -> "VPN"
-                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Mobile"
-                            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"
-                            else -> "Other or unknown"
-                        }
-                        val addresses = properties?.dnsServers.orEmpty()
-                            .map { it.hostAddress?.substringBefore('%') }
-                            .filterNotNull()
-                            .distinct()
-                        if (addresses.isEmpty()) {
-                            message = "No DNS servers were exposed by the active network."
+                        val snapshot = activeNetwork
+                        val addresses = snapshot.dnsServers
+                        if (!snapshot.isConnected) {
+                            message = "No active default network is currently available."
+                        } else if (addresses.isEmpty()) {
+                            message = "Connected through ${snapshot.transport}; Android has not exposed DNS servers yet. Try again in a moment."
                         } else {
-                            val entries = ResolverListParser.parse(addresses.joinToString("\n"), "current-network ($networkType; user label: $provider)")
+                            val operator = snapshot.operatorName ?: "unknown"
+                            val providerId = snapshot.providerId ?: "unmatched"
+                            val sourceLabel = "current-network (${snapshot.transport}; operator=$operator; providerId=$providerId; user label=$provider)"
+                            val entries = ResolverListParser.parse(addresses.joinToString("\\n"), sourceLabel)
                             val inserted = if (entries.isEmpty()) 0 else dao.insertOrMergeSources(entries)
-                            message = "Detected ${addresses.size} DNS server(s) on $networkType; saved $inserted new DNS entries with label: $provider. ISP ownership is not verified."
+                            addresses.forEach { address ->
+                                dao.insertResolverEvidence(
+                                    ResolverEvidenceEntity(
+                                        address = address,
+                                        port = 53,
+                                        sourceId = "current-network",
+                                        providerId = snapshot.providerId,
+                                        collectedAt = System.currentTimeMillis(),
+                                        evidenceType = if (snapshot.operatorName != null) EvidenceType.SIM_OPERATOR_MATCH else EvidenceType.ACTIVE_NETWORK,
+                                        ownershipStatus = OwnershipStatus.UNVERIFIED,
+                                        evidenceDetails = "transport=${snapshot.transport}; operator=${snapshot.operatorName ?: "unavailable"}; providerMatch=${snapshot.providerName ?: "none"}; userLabel=$provider"
+                                    )
+                                )
+                            }
+                            val activeName = snapshot.providerName ?: snapshot.operatorName ?: snapshot.transport.name
+                            message = "Detected ${addresses.size} DNS server(s) on $activeName; saved $inserted new entries. ISP ownership remains unverified."
                         }
                     } catch (exception: Exception) {
+                        AppLogger.record(dao, context, "WARN", "network-monitor", "Could not collect active network DNS", exception, stage = "collect")
                         message = "Could not read current network DNS: ${exception.message ?: "Unknown error"}"
                     }
                 }
