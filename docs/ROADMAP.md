@@ -7,11 +7,12 @@
 
 ## Stage 1 — Resolver data foundation
 - [x] Parse and validate IPv4, IPv6, hostname, and optional-port resolver entries.
-- [x] Persist resolver records and scan outcomes with Room (schema v8).
+- [x] Persist resolver records and scan outcomes with Room (schema v9).
 - [x] Import large TXT files in automatic batches of 500 with pause/resume.
 - [x] Normalize and deduplicate endpoints while merging source provenance.
 - [x] Search, sort, filter, and incrementally display the local resolver library.
 - [x] Keep scan, DoH, DoT, and source-collection histories locally.
+- [x] Add bounded local diagnostic logs with search, severity filters, redacted error details, TXT export, and clear controls (schema v9).
 
 ## Stage 2 — Public source collection
 - [x] Collect from reviewed public HTTPS lists, including a regional Iran list.
@@ -21,7 +22,7 @@
 - [x] Restrict source URLs and every redirect target to the reviewed HTTPS host allowlist.
 - [x] Fetch reviewed sources sequentially to keep network and memory use bounded; report per-source failures.
 - [ ] Make source adapters configurable without weakening URL policy.
-- [x] Persist source ID/name/URL, retrieval time, candidate count, fetch errors, and nullable terms notes in local history (schema v8).
+- [x] Persist source ID/name/URL, retrieval time, candidate count, fetch errors, and nullable terms notes in local history (schema v9).
 
 ## Stage 3 — DNS diagnostics
 - [x] Independent UDP and TCP DNS probes with bounded concurrency and timeout.

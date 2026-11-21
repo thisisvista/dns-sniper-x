@@ -9,7 +9,7 @@ DNS SniperX is an independent Android application. SlipNet is a possible destina
 | UI | Compose screens, progress, resolver list, filters, histories, import and export controls |
 | Collector | Sequential downloads from reviewed public HTTPS lists, bounded streaming parsing, deduplication and source provenance |
 | Domain | Resolver endpoint model, parser, per-transport outcomes, tunnel profile metadata and lifecycle state |
-| Storage | Room schema v8: resolver library, source-collection history, scan history, DoH/DoT histories and tunnel profile metadata |
+| Storage | Room schema v9: resolver library, source-collection history, scan history, DoH/DoT histories, tunnel profile metadata and bounded diagnostic logs |
 | Scanner | Independent UDP/TCP DNS probes, conditional EDNS/NXDOMAIN diagnostics, separate DoH and DoT checks |
 | Tunnel foundation | DNSTT/Slipstream profile metadata, lifecycle guard and Keystore-backed secret-vault groundwork; no operational tunnel yet |
 | Export | General resolver TXT export and dedicated SlipNet scanner TXT export |
@@ -50,8 +50,11 @@ DoH checks use RFC 8484 HTTPS POST against a fixed provider allowlist. DoT check
 ## Export interoperability
 The general resolver export retains non-default endpoint ports and supports bracketed IPv6. The dedicated SlipNet scanner export follows its scanner text format: unique working IPv4 addresses on port 53, one address per line. SlipNet profile resolver input is a separate format and is not conflated with scanner import.
 
+## Diagnostic logging
+Operational failures and selected warnings from collection, scanning, TXT import/export, and DoH/DoT checks are written to a local Room log. The log is bounded to the latest 1,000 entries; the UI shows the latest 500, supports severity filtering and text search, and displays sanitized error details on demand. Logs can be exported as TXT or cleared by the user. Secret-like assignments, URL user-info and URL query strings are redacted before persistence. Logging is best-effort and must never interrupt the operation being diagnosed. It is not a complete Android system/crash log and does not upload telemetry.
+
 ## Storage and migrations
-Room schema version 8 contains resolver records, source-collection history, scan history, DoH history, DoT history and tunnel profile metadata. Registered migrations cover versions 1→2 through 7→8. Resolver scan history and resolver status are updated transactionally. Histories are stored locally.
+Room schema version 9 contains resolver records, source-collection history, scan history, DoH history, DoT history, tunnel profile metadata and bounded diagnostic logs. Registered migrations cover versions 1→2 through 8→9. Resolver scan history and resolver status are updated transactionally. Histories and diagnostic logs are stored locally.
 
 ## Offline behaviour
 Offline mode can display the locally stored resolver library and prior results. Discovering new public resolvers or validating live network reachability requires internet connectivity.
