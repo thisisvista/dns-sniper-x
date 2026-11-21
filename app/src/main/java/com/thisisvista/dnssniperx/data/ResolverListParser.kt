@@ -13,7 +13,7 @@ object ResolverListParser {
     // WhiteDNS detailed TXT reports use lines such as:
     // "1.2.3.4  status=valid  score=6/6 ...". Import the endpoint as an
     // untested candidate; the report's verdict is historical and must be rechecked.
-    private val whiteDnsDetailLine = Regex("^((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})(?:\\s+status=)", RegexOption.IGNORE_CASE)
+    private val whiteDnsDetailLine = Regex("^([^\\s,]+)\\s+status=", RegexOption.IGNORE_CASE)
 
     fun parse(text: String, source: String = "manual"): List<ResolverEntity> {
         val now = System.currentTimeMillis()
