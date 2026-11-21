@@ -115,6 +115,47 @@ class ResolverDaoPagingTest {
     }
 
     @Test
+    fun scanCursorContinuesAcrossBatchesAsCompletedRowsLeavePendingSet() = runBlocking {
+        dao.insertIgnore(
+            (0 until 25).map { index ->
+                ResolverEntity(address = "10.20.${'${'}index / 250}.${'${'}index % 250 + 1}")
+            }
+        )
+
+        val firstBatch = dao.getPendingScanBatch(retryUnsuccessful = false, afterId = 0L, limit = 10)
+        assertEquals(10, firstBatch.size)
+        firstBatch.forEach { resolver ->
+            dao.updateScanResult(
+                id = resolver.id,
+                udpStatus = "PASS",
+                udpLatencyMs = 15L,
+                tcpStatus = "PASS",
+                tcpLatencyMs = 20L,
+                testedAt = 1_800_000_000_000L,
+                overallStatus = "DNS_PASS",
+                bestLatency = 15L,
+                note = null
+            )
+        }
+
+        val secondBatch = dao.getPendingScanBatch(
+            retryUnsuccessful = false,
+            afterId = firstBatch.last().id,
+            limit = 10
+        )
+        val thirdBatch = dao.getPendingScanBatch(
+            retryUnsuccessful = false,
+            afterId = secondBatch.last().id,
+            limit = 10
+        )
+
+        assertEquals(10, secondBatch.size)
+        assertEquals(5, thirdBatch.size)
+        assertEquals(25, (firstBatch + secondBatch + thirdBatch).map { it.id }.distinct().size)
+        assertEquals(15, dao.countPendingScan(retryUnsuccessful = false))
+    }
+
+    @Test
     fun slipNetExportQueryIncludesOnlyPort53IPv4Resolvers() = runBlocking {
         dao.insertIgnore(
             listOf(
