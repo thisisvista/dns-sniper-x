@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.thisisvista.dnssniperx.data.AppLogger
 import com.thisisvista.dnssniperx.data.DnsProbe
 import com.thisisvista.dnssniperx.data.ScanResourcePolicy
 import com.thisisvista.dnssniperx.data.DohProbe
@@ -116,7 +117,11 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
                             val slipNet = pendingExportMode == "SLIPNET"
-                            if (!slipNet) {
+                            val logs = pendingExportMode == "LOGS"
+                            if (logs) {
+                                writer.appendLine("# DNS SniperX diagnostic logs")
+                                writer.appendLine("# Sensitive values are redacted; logs are stored locally.")
+                            } else if (!slipNet) {
                                 writer.appendLine("# DNS SniperX - working DNS resolvers")
                                 writer.appendLine("# Exported: ${java.time.Instant.now()}")
                                 writer.appendLine("# Included when UDP or TCP returned a valid DNS response.")
@@ -131,34 +136,39 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                 skipped = workingCount - compatibleCount
                             }
                             while (true) {
-                                val batch = if (slipNet) {
-                                    dao.getSlipNetExportBatch(limit = 500, offset = offset)
-                                } else {
-                                    dao.getWorkingExportBatch(limit = 500, offset = offset)
-                                }
-                                if (batch.isEmpty()) break
-                                offset += batch.size
-                                for (resolver in batch) {
-                                    if (slipNet) {
-                                        writer.appendLine(resolver.address)
-                                    } else {
-                                        writer.appendLine(formatResolverEndpoint(resolver.address, resolver.port, includeDefaultPort = false))
+                                if (logs) {
+                                    val batch = dao.getAppLogExportBatch(limit = 500, offset = offset)
+                                    if (batch.isEmpty()) break
+                                    offset += batch.size
+                                    for (entry in batch) {
+                                        writer.appendLine("${entry.timestamp} | ${entry.level} | ${entry.module} | ${entry.message} | stage=${entry.stage ?: "-"} | id=${entry.identifier ?: "-"} | network=${entry.networkType} | app=${entry.appVersion}")
+                                        entry.details?.takeIf { it.isNotBlank() }?.lineSequence()?.forEach { writer.appendLine("  $it") }
+                                        exported++
                                     }
-                                    exported++
+                                } else {
+                                    val batch = if (slipNet) dao.getSlipNetExportBatch(limit = 500, offset = offset) else dao.getWorkingExportBatch(limit = 500, offset = offset)
+                                    if (batch.isEmpty()) break
+                                    offset += batch.size
+                                    for (resolver in batch) {
+                                        if (slipNet) writer.appendLine(resolver.address) else writer.appendLine(formatResolverEndpoint(resolver.address, resolver.port, includeDefaultPort = false))
+                                        exported++
+                                    }
                                 }
                             }
-                            if (exported == 0) throw IllegalStateException(
-                                if (slipNet) "No working IPv4 DNS entries on port 53 are available for SlipNet export."
-                                else "No working DNS entries are available to export yet. Run a scan first."
-                            )
-                            message = if (slipNet) {
-                                "Exported $exported IPv4 resolvers for SlipNet; skipped $skipped incompatible or duplicate entries."
-                            } else {
-                                "Exported $exported working DNS entries as TXT."
+                            if (exported == 0) throw IllegalStateException(when {
+                                logs -> "No diagnostic logs are available to export."
+                                slipNet -> "No working IPv4 DNS entries on port 53 are available for SlipNet export."
+                                else -> "No working DNS entries are available to export yet. Run a scan first."
+                            })
+                            message = when {
+                                logs -> "Exported $exported diagnostic log entries."
+                                slipNet -> "Exported $exported IPv4 resolvers for SlipNet; skipped $skipped incompatible or duplicate entries."
+                                else -> "Exported $exported working DNS entries as TXT."
                             }
                         } ?: error("Could not create the selected file.")
                     }
                 } catch (exception: Exception) {
+                    AppLogger.record(dao, context, "ERROR", "export", "TXT export failed", exception, stage = "write")
                     message = "TXT export failed: ${exception.message ?: "Could not write file"}"
                 }
             }
@@ -199,6 +209,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     message = "TXT import cancelled. Entries saved from completed batches remain in your library."
                     throw cancelled
                 } catch (exception: Exception) {
+                    AppLogger.record(dao, context, "ERROR", "import", "TXT import failed", exception, stage = "read-and-parse")
                     message = "TXT import failed: ${exception.message ?: "Could not read file"}. Entries saved from completed batches remain in your library."
                 } finally {
                     isImporting = false
@@ -322,6 +333,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                                     message = "$sourceName: received $found candidates; saved $inserted new entries…"
                                 }
                             )
+                            summary.results.filter { it.error != null }.forEach { failed ->
+                                AppLogger.record(dao, context, "WARN", "source-collector", "Public DNS source fetch failed: ${failed.source}", stage = "download", identifier = failed.sourceId)
+                            }
                             dao.saveSourceCollectionHistory(summary.results.map { result ->
                                 SourceCollectionHistoryEntity(
                                     sourceId = result.sourceId,
@@ -346,6 +360,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (exception: Exception) {
+                            AppLogger.record(dao, context, "ERROR", "source-collector", "Public DNS collection failed", exception, stage = "collect")
                             message = "Collection failed: ${exception.message ?: "Unknown error"}"
                         } finally {
                             isCollecting = false
@@ -456,6 +471,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             message = "Scan paused. Completed results were saved; press Resume to continue."
                             throw cancelled
                         } catch (exception: Exception) {
+                            AppLogger.record(dao, context, "ERROR", "dns-scanner", "DNS scan stopped unexpectedly", exception, stage = "scan")
                             message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry."
                         } finally {
                             isScanning = false
@@ -473,6 +489,11 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 pendingExportMode = "SLIPNET"
                 txtExportPicker.launch("dns-sniperx-slipnet-ipv4.txt")
             },
+            onExportLogs = {
+                pendingExportMode = "LOGS"
+                txtExportPicker.launch("dns-sniperx-logs.txt")
+            },
+            onClearLogs = { scope.launch { dao.clearAppLogs(); message = "Diagnostic logs cleared." } },
             onImport = {
                 val parsed = ResolverListParser.parse(importText)
                 scope.launch {
@@ -524,6 +545,8 @@ private fun HomeContent(
     onImportFile: () -> Unit,
     onExportHealthy: () -> Unit,
     onExportSlipNet: () -> Unit,
+    onExportLogs: () -> Unit,
+    onClearLogs: () -> Unit,
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -955,12 +978,71 @@ private fun HomeContent(
             }
         }
 
+        DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
+
         Text(
             "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 8.dp)
         )
+    }
+}
+
+
+@Composable
+private fun DiagnosticsLogsSection(dao: ResolverDao, onExport: () -> Unit, onClear: () -> Unit) {
+    val logs by dao.observeRecentAppLogs().collectAsState(initial = emptyList())
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var filter by rememberSaveable { mutableStateOf("ALL") }
+    var search by rememberSaveable { mutableStateOf("") }
+    var selectedLogId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
+    val filtered = logs.filter { entry ->
+        (filter == "ALL" || entry.level == filter) &&
+            (search.isBlank() || listOfNotNull(entry.module, entry.message, entry.details, entry.stage, entry.identifier).any { it.contains(search, ignoreCase = true) })
+    }
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Settings · Logs & diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("${logs.size} recent entries saved locally (maximum 1,000). Sensitive values are redacted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) { Text(if (expanded) "Hide diagnostic logs" else "Open diagnostic logs") }
+            if (expanded) {
+                OutlinedTextField(value = search, onValueChange = { search = it }, label = { Text("Search logs") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("ALL" to "All", "ERROR" to "Errors", "WARN" to "Warnings", "INFO" to "Info").forEach { (value, label) ->
+                        FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(label) })
+                    }
+                }
+                if (filtered.isEmpty()) Text("No matching diagnostic logs.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else filtered.take(100).forEach { entry ->
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("${entry.level} · ${entry.module}", fontWeight = FontWeight.SemiBold)
+                            Text(entry.message, style = MaterialTheme.typography.bodySmall)
+                            Text("${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.timestamp))} · ${entry.networkType} · ${entry.appVersion}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (entry.stage != null || entry.identifier != null) Text("Stage: ${entry.stage ?: "-"} · ID: ${entry.identifier ?: "-"}", style = MaterialTheme.typography.labelSmall)
+                            if (!entry.details.isNullOrBlank()) {
+                                OutlinedButton(onClick = { selectedLogId = if (selectedLogId == entry.id) null else entry.id }) { Text(if (selectedLogId == entry.id) "Hide details" else "View error details") }
+                                if (selectedLogId == entry.id) Text(entry.details, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+                if (filtered.size > 100) Text("Showing latest 100 matching entries. Export includes all retained logs.", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onExport, modifier = Modifier.weight(1f)) { Text("Export TXT") }
+                    OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.weight(1f)) { Text("Clear logs") }
+                }
+                if (confirmClear) {
+                    Text("Delete all saved diagnostic logs?", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onClear(); confirmClear = false }) { Text("Confirm clear") }
+                        OutlinedButton(onClick = { confirmClear = false }) { Text("Cancel") }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -458,6 +458,27 @@ interface ResolverDao {
         return insertedCount
     }
 
+    @Query("SELECT * FROM app_logs ORDER BY timestamp DESC, id DESC LIMIT 500")
+    fun observeRecentAppLogs(): Flow<List<AppLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAppLog(entry: AppLogEntity)
+
+    @Query("DELETE FROM app_logs WHERE id NOT IN (SELECT id FROM app_logs ORDER BY timestamp DESC, id DESC LIMIT 1000)")
+    suspend fun pruneAppLogs()
+
+    @Transaction
+    suspend fun addAppLog(entry: AppLogEntity) {
+        insertAppLog(entry)
+        pruneAppLogs()
+    }
+
+    @Query("SELECT * FROM app_logs ORDER BY timestamp ASC, id ASC LIMIT :limit OFFSET :offset")
+    suspend fun getAppLogExportBatch(limit: Int, offset: Int): List<AppLogEntity>
+
+    @Query("DELETE FROM app_logs")
+    suspend fun clearAppLogs()
+
     @Query("DELETE FROM resolvers WHERE id = :id")
     suspend fun deleteById(id: Long)
 }
