@@ -29,6 +29,7 @@ object EvidenceType {
     const val ACTIVE_NETWORK = "ACTIVE_NETWORK"
     const val SIM_OPERATOR_MATCH = "SIM_OPERATOR_MATCH"
     const val PROVIDER_DOCUMENTATION = "PROVIDER_DOCUMENTATION"
+    const val REGISTRY_PREFIX = "REGISTRY_PREFIX"
     const val USER_LABEL = "USER_LABEL"
 }
 
