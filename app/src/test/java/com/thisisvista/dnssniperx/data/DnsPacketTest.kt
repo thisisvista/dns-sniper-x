@@ -64,6 +64,26 @@ class DnsPacketTest {
     }
 
     @Test
+    fun exposesRecursionAvailableAndAuthoritativeFlagsSeparately() {
+        val query = DnsPacket.buildQuery("example.com", 42)
+        val recursive = query.copyOf().apply {
+            this[2] = 0x81.toByte()
+            this[3] = 0x80.toByte()
+        }
+        val recursiveInfo = DnsPacket.validateResponse(query, recursive)
+        assertEquals(true, recursiveInfo.recursionAvailable)
+        assertEquals(false, recursiveInfo.authoritativeAnswer)
+
+        val authoritative = query.copyOf().apply {
+            this[2] = 0x85.toByte() // QR + AA + RD + RA
+            this[3] = 0x80.toByte()
+        }
+        val authoritativeInfo = DnsPacket.validateResponse(query, authoritative)
+        assertEquals(true, authoritativeInfo.recursionAvailable)
+        assertEquals(true, authoritativeInfo.authoritativeAnswer)
+    }
+
+    @Test
     fun rejectsMismatchedTransactionId() {
         val query = DnsPacket.buildQuery("example.com", 42)
         val response = query.copyOf().apply {
