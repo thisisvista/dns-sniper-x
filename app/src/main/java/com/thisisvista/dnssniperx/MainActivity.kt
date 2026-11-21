@@ -368,7 +368,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     }
                 }
             },
-            onScan = { retryUnsuccessful ->
+            onScan = { retryUnsuccessful, sourceFilter ->
                 if (isScanning) {
                     scanJob?.cancel()
                     message = "Pause requested. The current batch will stop; completed batches are already saved."
@@ -379,7 +379,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                         try {
                             // Keep the scan job active while counting so Pause works even
                             // when the library is large and the initial query takes time.
-                            val total = dao.countPendingScan(retryUnsuccessful)
+                            val total = dao.countPendingScan(retryUnsuccessful, sourceFilter)
                             if (total == 0) {
                                 message = if (retryUnsuccessful) {
                                     "No previously tested DNS entries need a retry."
@@ -396,6 +396,7 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                             while (true) {
                                 val batch = dao.getPendingScanBatch(
                                     retryUnsuccessful = retryUnsuccessful,
+                                    sourceFilter = sourceFilter,
                                     afterId = lastId,
                                     limit = ScanResourcePolicy.MAX_SCAN_BATCH_SIZE
                                 )
@@ -541,7 +542,7 @@ private fun HomeContent(
     onTestDot: () -> Unit,
     onCollect: (Set<String>) -> Unit,
     onCollectNetworkDns: (String) -> Unit,
-    onScan: (retryUnsuccessful: Boolean) -> Unit,
+    onScan: (retryUnsuccessful: Boolean, sourceFilter: String) -> Unit,
     onImportFile: () -> Unit,
     onExportHealthy: () -> Unit,
     onExportSlipNet: () -> Unit,
@@ -552,6 +553,7 @@ private fun HomeContent(
 ) {
     var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
+    var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
     var selectedProviderLabel by rememberSaveable { mutableStateOf("ALL") }
     var fastestFirst by rememberSaveable { mutableStateOf(false) }
@@ -786,11 +788,30 @@ private fun HomeContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Button(onClick = { onScan(false) }, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
+        Text("Scan source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Choose which untested DNS entries to scan. This selection is kept when you pause and resume.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("ALL" to "All DNS", "MANUAL" to "Manual only", "PUBLIC" to "Public only").forEach { (key, label) ->
+                FilterChip(
+                    selected = selectedScanSource == key,
+                    onClick = { selectedScanSource = key },
+                    enabled = !isScanning,
+                    label = { Text(label) }
+                )
+            }
+        }
+        Button(onClick = { onScan(false, selectedScanSource) }, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             if (isScanning) Text("Pause scan") else Text("Scan / Resume untested DNS (UDP + TCP)")
         }
         Button(
-            onClick = { onScan(true) },
+            onClick = { onScan(true, selectedScanSource) },
             enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) {
