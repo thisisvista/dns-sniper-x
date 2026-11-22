@@ -46,3 +46,15 @@ Consequences for SniperX:
 - Resolver sockets must be protected from any future Android `VpnService` routing loop; the current SniperX manifest does not yet declare or implement a VPN service.
 
 The source repository's top-level project and `go_src/COPYING` both declare CC0 1.0 for their respective project/source. This does not clear the licenses of Go module dependencies. The transitive dependency license audit remains a release gate before redistributing the generated AAR.
+
+## Expected end-to-end verification path
+
+The mobile binding's local TCP listener is a raw stream forwarder, not itself a SOCKS5 server. The upstream Android app implements SOCKS5 negotiation over that local TCP connection; its DNSTT server-side `UPSTREAMADDR` must point at a SOCKS5-capable endpoint. A correct SniperX full verification should therefore:
+
+1. Start the Go DNSTT client against the candidate resolver IP and configured tunnel domain/key.
+2. Connect to the local TCP listener.
+3. Perform the SOCKS5 greeting and CONNECT request for the verification URL's host and port.
+4. Send an HTTP request through the established SOCKS5 stream.
+5. Require a valid HTTP response (2xx/3xx plus expected body or challenge token), not merely a TCP accept or SOCKS5 greeting.
+
+This avoids falsely counting the local listener or Noise handshake as successful internet access. The verification endpoint and expected response should be controlled/configurable so the test does not rely solely on one third-party URL.
