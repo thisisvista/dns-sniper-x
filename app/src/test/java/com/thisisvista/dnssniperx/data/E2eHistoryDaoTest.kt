@@ -212,6 +212,61 @@ class E2eHistoryDaoTest {
         assertEquals("CELLULAR:mci", saved.networkKey)
     }
 
+    @Test
+    fun slipNetExportQueryIncludesOnlyLatestSuccessfulFullHttpProof() = runBlocking {
+        val profile = testProfile()
+        database.resolverDao().saveTunnelProfile(TunnelProfileMapper.toEntity(profile))
+        dao.insertAttempt(
+            E2eHistoryEntity(
+                resolverAddress = "10.20.30.50", resolverPort = 53, testedAt = 100,
+                networkKey = "CELLULAR:mci", networkTransport = "CELLULAR",
+                profileId = profile.id, tunnelProtocol = "DNSTT",
+                verificationMode = "FULL", status = "FULL_PASS",
+                phase = "COMPLETED", elapsedMs = 900, httpStatusCode = 204
+            )
+        )
+        // A later failed retest must not erase the last known successful proof.
+        dao.insertAttempt(
+            E2eHistoryEntity(
+                resolverAddress = "10.20.30.50", resolverPort = 53, testedAt = 200,
+                networkKey = "WIFI", networkTransport = "WIFI",
+                profileId = profile.id, tunnelProtocol = "DNSTT",
+                verificationMode = "FULL", status = "FULL_FAIL",
+                phase = "APPLICATION_REQUEST", elapsedMs = 15_000, httpStatusCode = 500
+            )
+        )
+        // A handshake-only pass is weaker and must never enter the SlipNet FULL list.
+        dao.insertAttempt(
+            E2eHistoryEntity(
+                resolverAddress = "10.20.30.51", resolverPort = 53, testedAt = 300,
+                networkKey = "WIFI", networkTransport = "WIFI",
+                profileId = profile.id, tunnelProtocol = "DNSTT",
+                verificationMode = "HANDSHAKE", status = "HANDSHAKE_PASS",
+                phase = "COMPLETED", elapsedMs = 300
+            )
+        )
+        // A FULL_PASS label without a successful HTTP status is not exportable.
+        dao.insertAttempt(
+            E2eHistoryEntity(
+                resolverAddress = "10.20.30.52", resolverPort = 53, testedAt = 400,
+                networkKey = "WIFI", networkTransport = "WIFI",
+                profileId = profile.id, tunnelProtocol = "DNSTT",
+                verificationMode = "FULL", status = "FULL_PASS",
+                phase = "COMPLETED", elapsedMs = 400, httpStatusCode = 500
+            )
+        )
+
+        val rows = dao.getSlipNetE2eExportBatch(limit = 100, offset = 0)
+
+        assertEquals(1, rows.size)
+        assertEquals("10.20.30.50", rows.single().resolverAddress)
+        assertEquals(100L, rows.single().testedAt)
+        assertEquals("DNSTT", rows.single().tunnelProtocol)
+        assertEquals(204, rows.single().httpStatusCode)
+        val formatted = SlipNetE2eExportFormatter.format(rows)
+        assertEquals("10.20.30.50\n", formatted.resolverListText)
+    }
+
     private fun testProfile() = TunnelProfile(
         id = "dnstt-profile",
         name = "Test DNSTT",
