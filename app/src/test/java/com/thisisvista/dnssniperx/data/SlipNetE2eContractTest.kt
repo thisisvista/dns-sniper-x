@@ -33,18 +33,55 @@ class SlipNetE2eContractTest {
     }
 
     @Test
-    fun dnsOrTransportPassCannotBeRepresentedAsE2ePass() {
-        val notConfigured = SlipNetE2eResult.notConfigured()
+    fun unavailableEngineRemainsNotConfiguredInsteadOfBeingReportedAsFailure() {
+        val result = SlipNetE2eResult.notConfigured()
 
-        assertFalse(notConfigured.isPass)
-        assertEquals(E2eStatus.HANDSHAKE_FAIL,
-            E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, notConfigured))
-        assertEquals(E2eStatus.FULL_FAIL,
-            E2eResultGate.accept(E2eVerificationMode.FULL, notConfigured))
+        assertFalse(result.isPass)
+        assertEquals(
+            E2eStatus.NOT_CONFIGURED,
+            E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, result)
+        )
+        assertEquals(
+            E2eStatus.NOT_CONFIGURED,
+            E2eResultGate.accept(E2eVerificationMode.FULL, result)
+        )
     }
 
     @Test
-    fun fullPassIsAcceptedOnlyForFullVerification() {
+    fun unattemptedVerificationRemainsNotTested() {
+        val result = SlipNetE2eResult(
+            status = E2eStatus.NOT_TESTED,
+            phase = E2ePhase.NOT_STARTED,
+            elapsedMs = 0
+        )
+
+        assertEquals(
+            E2eStatus.NOT_TESTED,
+            E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, result)
+        )
+        assertEquals(
+            E2eStatus.NOT_TESTED,
+            E2eResultGate.accept(E2eVerificationMode.FULL, result)
+        )
+    }
+
+    @Test
+    fun dnsOrTransportPassCannotBeRepresentedAsE2ePass() {
+        val result = SlipNetE2eResult(
+            status = E2eStatus.NOT_CONFIGURED,
+            phase = E2ePhase.NOT_STARTED,
+            elapsedMs = 0
+        )
+
+        assertFalse(result.isPass)
+        assertEquals(E2eStatus.NOT_CONFIGURED,
+            E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, result))
+        assertEquals(E2eStatus.NOT_CONFIGURED,
+            E2eResultGate.accept(E2eVerificationMode.FULL, result))
+    }
+
+    @Test
+    fun fullPassIsAcceptedOnlyForFullVerificationAndValidHttpStatus() {
         val result = SlipNetE2eResult(
             status = E2eStatus.FULL_PASS,
             phase = E2ePhase.COMPLETED,
@@ -55,6 +92,21 @@ class SlipNetE2eContractTest {
         assertEquals(E2eStatus.HANDSHAKE_PASS,
             E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, result))
         assertEquals(E2eStatus.FULL_PASS,
+            E2eResultGate.accept(E2eVerificationMode.FULL, result))
+    }
+
+    @Test
+    fun fullPassWithoutSuccessfulHttpProofIsRejected() {
+        val result = SlipNetE2eResult(
+            status = E2eStatus.FULL_PASS,
+            phase = E2ePhase.COMPLETED,
+            elapsedMs = 2500,
+            httpStatusCode = 500
+        )
+
+        assertEquals(E2eStatus.HANDSHAKE_FAIL,
+            E2eResultGate.accept(E2eVerificationMode.HANDSHAKE, result))
+        assertEquals(E2eStatus.FULL_FAIL,
             E2eResultGate.accept(E2eVerificationMode.FULL, result))
     }
 
