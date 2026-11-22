@@ -33,6 +33,7 @@ enum class E2eStatus {
     NOT_CONFIGURED,
     NOT_TESTED,
     CANCELLED,
+    TIMEOUT,
     HANDSHAKE_PASS,
     HANDSHAKE_FAIL,
     FULL_PASS,
@@ -99,7 +100,8 @@ object E2eResultGate {
         when (result.status) {
             E2eStatus.NOT_CONFIGURED,
             E2eStatus.NOT_TESTED,
-            E2eStatus.CANCELLED -> return result.status
+            E2eStatus.CANCELLED,
+            E2eStatus.TIMEOUT -> return result.status
             else -> Unit
         }
 
