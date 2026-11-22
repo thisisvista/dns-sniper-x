@@ -34,6 +34,7 @@ import com.thisisvista.dnssniperx.data.E2eVerificationMode
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.SlipNetE2eEngine
 import com.thisisvista.dnssniperx.data.SlipNetE2eExportFormatter
+import com.thisisvista.dnssniperx.data.SlipNetE2eExportRow
 import com.thisisvista.dnssniperx.data.TunnelProfile
 import com.thisisvista.dnssniperx.data.TunnelProfileMapper
 import com.thisisvista.dnssniperx.data.TunnelProtocol
@@ -100,7 +101,7 @@ internal fun E2eVerificationSection(
         if (uri != null) scope.launch {
             exporting = true
             try {
-                val rows = historyDao.getSlipNetE2eExportBatch(limit = 1000, offset = 0)
+                val rows = loadAllSlipNetE2eExportRows(historyDao)
                 val result = SlipNetE2eExportFormatter.format(rows)
                 check(result.exportedCount > 0) { "No FULL HTTP-verified DNSTT/VayDNS results are available yet." }
                 withContext(Dispatchers.IO) {
