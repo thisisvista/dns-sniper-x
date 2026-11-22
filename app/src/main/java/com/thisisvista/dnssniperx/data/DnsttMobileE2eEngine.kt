@@ -57,17 +57,18 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
 
             // DNSTT forwards to the server-side UPSTREAMADDR; serverPort in the
             // generic profile is not a client-selectable DNSTT destination.
-            client = Mobile.newClient(
+            val dnsttClient = Mobile.newClient(
                 resolver,
                 request.profile.serverHost,
                 publicKey,
                 listenAddress
             )
+            client = dnsttClient
 
             onPhase("Establishing encrypted DNSTT handshake")
             phase = E2ePhase.HANDSHAKE
-            client.start()
-            check(client.isRunning) { "DNSTT client did not enter the running state" }
+            dnsttClient.start()
+            check(dnsttClient.isRunning) { "DNSTT client did not enter the running state" }
 
             if (request.mode == E2eVerificationMode.HANDSHAKE) {
                 result = SlipNetE2eResult(
