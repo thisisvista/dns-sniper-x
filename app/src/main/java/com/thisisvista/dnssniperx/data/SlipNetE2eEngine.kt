@@ -81,29 +81,49 @@ data class SlipNetE2eResult(
 }
 
 /**
- * Central result gate. A result from a weaker verification mode can never be
- * promoted to a stronger status (e.g. handshake-only cannot become FULL_PASS).
+ * Central result gate. A weaker verification can never be promoted to a
+ * stronger pass. Unavailable and unattempted tests remain distinct from failures.
  */
 object E2eResultGate {
     fun accept(
         requestedMode: E2eVerificationMode,
         result: SlipNetE2eResult
     ): E2eStatus {
-        if (!result.isPass || result.phase != E2ePhase.COMPLETED) {
-            return when (requestedMode) {
-                E2eVerificationMode.HANDSHAKE -> E2eStatus.HANDSHAKE_FAIL
-                E2eVerificationMode.FULL -> E2eStatus.FULL_FAIL
+        // These are workflow states, not failed network tests. Preserve them so
+        // reports never imply that an unavailable engine actually attempted E2E.
+        when (result.status) {
+            E2eStatus.NOT_CONFIGURED -> return E2eStatus.NOT_CONFIGURED
+            E2eStatus.NOT_TESTED -> return E2eStatus.NOT_TESTED
+            else -> Unit
+        }
+
+        if (result.phase != E2ePhase.COMPLETED) {
+            return failureFor(requestedMode)
+        }
+
+        return when (requestedMode) {
+            E2eVerificationMode.HANDSHAKE -> when (result.status) {
+                E2eStatus.HANDSHAKE_PASS -> E2eStatus.HANDSHAKE_PASS
+                E2eStatus.FULL_PASS -> if (result.httpStatusCode in 200..399) {
+                    E2eStatus.HANDSHAKE_PASS
+                } else {
+                    E2eStatus.HANDSHAKE_FAIL
+                }
+                else -> E2eStatus.HANDSHAKE_FAIL
+            }
+            E2eVerificationMode.FULL -> when (result.status) {
+                E2eStatus.FULL_PASS -> if (result.httpStatusCode in 200..399) {
+                    E2eStatus.FULL_PASS
+                } else {
+                    E2eStatus.FULL_FAIL
+                }
+                else -> E2eStatus.FULL_FAIL
             }
         }
-        return when (requestedMode) {
-            E2eVerificationMode.HANDSHAKE ->
-                if (result.status == E2eStatus.HANDSHAKE_PASS ||
-                    result.status == E2eStatus.FULL_PASS
-                ) E2eStatus.HANDSHAKE_PASS else E2eStatus.HANDSHAKE_FAIL
-            E2eVerificationMode.FULL ->
-                if (result.status == E2eStatus.FULL_PASS &&
-                    result.httpStatusCode in 200..399
-                ) E2eStatus.FULL_PASS else E2eStatus.FULL_FAIL
-        }
+    }
+
+    private fun failureFor(mode: E2eVerificationMode): E2eStatus = when (mode) {
+        E2eVerificationMode.HANDSHAKE -> E2eStatus.HANDSHAKE_FAIL
+        E2eVerificationMode.FULL -> E2eStatus.FULL_FAIL
     }
 }
