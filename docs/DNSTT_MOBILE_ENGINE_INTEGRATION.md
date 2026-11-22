@@ -27,10 +27,11 @@ The script downloads the immutable source archive, verifies Go module checksums,
 - [x] Select and pin a retrievable source snapshot.
 - [x] Add a reproducible Android AAR build script.
 - [ ] Audit transitive dependency licenses for redistribution.
-- [ ] Inspect generated Java API and write the Kotlin lifecycle adapter.
-- [ ] Implement isolated resolver socket routing for Android VPN coexistence.
-- [ ] Add controlled-server handshake and real application-traffic tests.
-- [ ] Connect verified results to the resolver/network evidence store.
+- [x] Inspect the generated Java API and add a Kotlin DNSTT lifecycle/E2E adapter.
+- [ ] Verify the gomobile-compatible socket-protection interface in CI, then wire it to Android VPN protection where applicable.
+- [x] Add a local fake-SOCKS5 HTTP probe test for protocol framing and response parsing.
+- [ ] Add a real controlled DNSTT server + upstream integration test.
+- [ ] Connect the engine to the scanner workflow and persist per-network resolver evidence.
 
 Do not mark an E2E result as successful until the tunnel has carried an application-level request through a controlled DNSTT server. A successful AAR build alone proves only that the native binding compiles.
 
@@ -75,3 +76,8 @@ Important API gaps found:
 4. The generated API does not expose `DialTunnel` because its return type is Go `net.Conn`.
 
 These findings mean the AAR is a successful build artifact, **not yet an integration-ready SniperX engine**. The build script now applies a guarded source transformation before binding: it replaces the function callback with a gomobile-compatible `SocketProtector` interface and removes the unused TUN-FD setter/field. CI must verify that the generated Java API exposes `setSocketProtector` and the callback's `protect(long)` method. Even after it builds, the Kotlin adapter must wire this callback to `VpnService.protect(fd)` when running alongside an Android VPN service, and that path needs on-device testing. A local fake-SOCKS5 HTTP probe test has been added; a real controlled DNSTT server test remains outstanding.
+
+
+## Current SniperX wiring boundary
+
+`DnsttMobileE2eEngine` now implements the engine contract and performs the DNSTT start/stop lifecycle plus SOCKS5 CONNECT and HTTP status verification. Its local SOCKS5 protocol path has a deterministic loopback test. However, the current application tree does not yet inject this engine into the resolver scan workflow or persist its result against the active network/provider evidence. The engine is therefore an implemented component under test, not yet an end-user feature exposed by the UI. Do not claim that the app can currently scan candidates and automatically promote DNSTT E2E winners.
