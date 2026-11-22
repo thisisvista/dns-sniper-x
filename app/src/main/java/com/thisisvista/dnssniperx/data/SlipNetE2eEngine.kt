@@ -101,8 +101,9 @@ object E2eResultGate {
                     result.status == E2eStatus.FULL_PASS
                 ) E2eStatus.HANDSHAKE_PASS else E2eStatus.HANDSHAKE_FAIL
             E2eVerificationMode.FULL ->
-                if (result.status == E2eStatus.FULL_PASS) E2eStatus.FULL_PASS
-                else E2eStatus.FULL_FAIL
+                if (result.status == E2eStatus.FULL_PASS &&
+                    result.httpStatusCode in 200..399
+                ) E2eStatus.FULL_PASS else E2eStatus.FULL_FAIL
         }
     }
 }
