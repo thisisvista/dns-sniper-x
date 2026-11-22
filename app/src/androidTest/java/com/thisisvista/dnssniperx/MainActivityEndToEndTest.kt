@@ -144,15 +144,26 @@ class MainActivityEndToEndTest {
             .performScrollTo()
             .assertIsDisplayed()
 
-        // Recreate the real Activity: the saved record must still be loaded from Room.
+        // Recreate the real Activity: first prove Room still owns the row, then
+        // wait for the recreated Activity's Flow-backed dashboard to render it.
         composeRule.activityRule.scenario.recreate()
+        runBlocking {
+            withTimeout(30_000) {
+                dao.observeCount().first { it == 1 }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Local DNS library").performScrollTo().assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
+            composeRule.onAllNodesWithText(
+                "1 DNS entries saved on this device.", useUnmergedTree = true
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText(endpoint, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(endpoint, useUnmergedTree = true)
+            .performScrollTo().assertIsDisplayed()
     }
 }
