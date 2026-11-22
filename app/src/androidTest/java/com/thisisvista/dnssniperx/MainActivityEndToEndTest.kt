@@ -140,7 +140,9 @@ class MainActivityEndToEndTest {
                 dao.observeCount().first { it == 1 }
             }
         }
-        composeRule.onNodeWithText("1 DNS entries saved on this device.").assertIsDisplayed()
+        composeRule.onNodeWithText("1 DNS entries saved on this device.")
+            .performScrollTo()
+            .assertIsDisplayed()
 
         // Recreate the real Activity: the saved record must still be loaded from Room.
         composeRule.activityRule.scenario.recreate()
