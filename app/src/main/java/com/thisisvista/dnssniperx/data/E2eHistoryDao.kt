@@ -57,29 +57,31 @@ interface E2eHistoryDao {
             e.networkLabel AS networkLabel,
             e.operatorName AS operatorName,
             e.providerId AS providerId,
-            p.id AS profileId,
-            p.name AS profileName,
+            e.profileId AS profileId,
+            e.profileName AS profileName,
             e.tunnelProtocol AS tunnelProtocol,
-            p.serverHost AS serverHost,
-            p.serverPort AS serverPort,
-            p.dnsttServerPublicKey AS dnsttServerPublicKey,
-            p.slipstreamTlsServerName AS slipstreamTlsServerName,
+            e.serverHost AS serverHost,
+            e.serverPort AS serverPort,
+            e.dnsttServerPublicKey AS dnsttServerPublicKey,
+            e.slipstreamTlsServerName AS slipstreamTlsServerName,
             e.verificationMode AS verificationMode,
             e.status AS status,
             e.elapsedMs AS elapsedMs,
             e.httpStatusCode AS httpStatusCode
         FROM e2e_history AS e
-        INNER JOIN tunnel_profiles AS p ON p.id = e.profileId
         WHERE e.resolverPort = 53
           AND e.verificationMode = 'FULL'
           AND e.status = 'FULL_PASS'
           AND e.httpStatusCode BETWEEN 200 AND 399
           AND e.tunnelProtocol IN ('DNSTT', 'VAYDNS')
+          AND e.profileName != ''
+          AND e.serverHost != ''
           AND NOT EXISTS (
               SELECT 1 FROM e2e_history AS newer
               WHERE newer.resolverAddress = e.resolverAddress
                 AND newer.resolverPort = e.resolverPort
                 AND newer.profileId = e.profileId
+                AND newer.tunnelProtocol = e.tunnelProtocol
                 AND newer.verificationMode = 'FULL'
                 AND newer.status = 'FULL_PASS'
                 AND newer.httpStatusCode BETWEEN 200 AND 399
