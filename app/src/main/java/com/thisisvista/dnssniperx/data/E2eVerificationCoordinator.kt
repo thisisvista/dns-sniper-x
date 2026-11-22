@@ -5,6 +5,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Runs a selected tunnel adapter against one resolver and persists immutable
@@ -24,7 +25,8 @@ class E2eVerificationCoordinator(
         timeoutMs: Long = 15_000,
         verificationUrl: String = "http://www.gstatic.com/generate_204",
         expectedHttpStatusCode: Int? = 204,
-        onPhase: (String) -> Unit = {}
+        onPhase: (String) -> Unit = {},
+        onPhaseChanged: (E2ePhase) -> Unit = {}
     ): SlipNetE2eResult {
         require(resolverAddress.isNotBlank()) { "Resolver address is required" }
         require(resolverPort in 1..65535) { "Resolver port must be between 1 and 65535" }
@@ -50,6 +52,7 @@ class E2eVerificationCoordinator(
             expectedHttpStatusCode = expectedHttpStatusCode
         )
         val startedAt = System.nanoTime()
+        val currentPhase = AtomicReference(E2ePhase.NOT_STARTED)
         val engine = engines[profile.protocol]
         val rawResult = if (engine == null) {
             SlipNetE2eResult.notConfigured(
@@ -58,12 +61,19 @@ class E2eVerificationCoordinator(
         } else {
             try {
                 withTimeout(timeoutMs) {
-                    engine.verify(request, onPhase)
+                    engine.verify(
+                        request = request,
+                        onPhase = onPhase,
+                        onPhaseChanged = { phase ->
+                            currentPhase.set(phase)
+                            onPhaseChanged(phase)
+                        }
+                    )
                 }
             } catch (timeout: TimeoutCancellationException) {
                 SlipNetE2eResult(
                     status = E2eStatus.TIMEOUT,
-                    phase = E2ePhase.NOT_STARTED,
+                    phase = currentPhase.get(),
                     elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L,
                     errorMessage = "E2E verification exceeded the ${timeoutMs} ms total time limit"
                 )
@@ -80,7 +90,7 @@ class E2eVerificationCoordinator(
                             network = network,
                             result = SlipNetE2eResult(
                                 status = E2eStatus.CANCELLED,
-                                phase = E2ePhase.NOT_STARTED,
+                                phase = currentPhase.get(),
                                 elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L,
                                 errorMessage = "E2E verification was cancelled"
                             )
@@ -91,7 +101,7 @@ class E2eVerificationCoordinator(
             } catch (failure: Exception) {
                 SlipNetE2eResult(
                     status = if (mode == E2eVerificationMode.FULL) E2eStatus.FULL_FAIL else E2eStatus.HANDSHAKE_FAIL,
-                    phase = E2ePhase.NOT_STARTED,
+                    phase = currentPhase.get(),
                     elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L,
                     errorMessage = failure.message ?: failure.javaClass.simpleName
                 )
