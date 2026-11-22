@@ -3,6 +3,7 @@ package com.thisisvista.dnssniperx.data
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -82,14 +83,7 @@ class E2eHistoryDaoTest {
 
     @Test
     fun coordinatorRunsSelectedEngineAndPersistsNetworkSpecificEvidence() = runBlocking {
-        val profile = TunnelProfile(
-            id = "dnstt-profile",
-            name = "Test DNSTT",
-            protocol = TunnelProtocol.DNSTT,
-            serverHost = "tunnel.example.test",
-            serverPort = 5300,
-            dnsttServerPublicKey = "a".repeat(64)
-        )
+        val profile = testProfile()
         val fakeEngine = object : SlipNetE2eEngine {
             override suspend fun verify(
                 request: SlipNetE2eRequest,
@@ -110,20 +104,13 @@ class E2eHistoryDaoTest {
             historyDao = dao,
             engines = mapOf(TunnelProtocol.DNSTT to fakeEngine)
         )
-        val network = ActiveNetworkState(
-            isConnected = true,
-            transport = ActiveNetworkTransport.CELLULAR,
-            operatorName = "MCI",
-            providerId = "mci",
-            providerName = "همراه اول"
-        )
 
         val result = coordinator.verify(
             resolverAddress = "10.20.30.40",
             resolverPort = 53,
             profile = profile,
             mode = E2eVerificationMode.FULL,
-            network = network
+            network = testCellularNetwork()
         )
 
         assertEquals(E2eStatus.FULL_PASS, result.status)
@@ -137,14 +124,6 @@ class E2eHistoryDaoTest {
 
     @Test
     fun coordinatorRecordsUnavailableAdapterWithoutClaimingFailureOrSuccess() = runBlocking {
-        val profile = TunnelProfile(
-            id = "dnstt-profile",
-            name = "Test DNSTT",
-            protocol = TunnelProtocol.DNSTT,
-            serverHost = "tunnel.example.test",
-            serverPort = 5300,
-            dnsttServerPublicKey = "b".repeat(64)
-        )
         val coordinator = E2eVerificationCoordinator(
             historyDao = dao,
             engines = emptyMap()
@@ -157,7 +136,7 @@ class E2eHistoryDaoTest {
         val result = coordinator.verify(
             resolverAddress = "10.20.30.41",
             resolverPort = 53,
-            profile = profile,
+            profile = testProfile(),
             mode = E2eVerificationMode.FULL,
             network = network
         )
@@ -168,4 +147,54 @@ class E2eHistoryDaoTest {
         assertEquals("WIFI", saved.networkKey)
     }
 
+    @Test
+    fun coordinatorPersistsCancellationAndStillPropagatesIt() = runBlocking {
+        val cancelledEngine = object : SlipNetE2eEngine {
+            override suspend fun verify(
+                request: SlipNetE2eRequest,
+                onPhase: (String) -> Unit
+            ): SlipNetE2eResult {
+                throw CancellationException("cancelled in test")
+            }
+        }
+        val coordinator = E2eVerificationCoordinator(
+            historyDao = dao,
+            engines = mapOf(TunnelProtocol.DNSTT to cancelledEngine)
+        )
+
+        var cancellationPropagated = false
+        try {
+            coordinator.verify(
+                resolverAddress = "10.20.30.42",
+                resolverPort = 53,
+                profile = testProfile(),
+                mode = E2eVerificationMode.FULL,
+                network = testCellularNetwork()
+            )
+        } catch (_: CancellationException) {
+            cancellationPropagated = true
+        }
+
+        assertEquals(true, cancellationPropagated)
+        val saved = dao.getResolverAttempts("10.20.30.42", 53).single()
+        assertEquals("CANCELLED", saved.status)
+        assertEquals("CELLULAR:mci", saved.networkKey)
+    }
+
+    private fun testProfile() = TunnelProfile(
+        id = "dnstt-profile",
+        name = "Test DNSTT",
+        protocol = TunnelProtocol.DNSTT,
+        serverHost = "tunnel.example.test",
+        serverPort = 53,
+        dnsttServerPublicKey = "a".repeat(64)
+    )
+
+    private fun testCellularNetwork() = ActiveNetworkState(
+        isConnected = true,
+        transport = ActiveNetworkTransport.CELLULAR,
+        operatorName = "MCI",
+        providerId = "mci",
+        providerName = "همراه اول"
+    )
 }
