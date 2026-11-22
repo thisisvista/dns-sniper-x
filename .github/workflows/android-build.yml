@@ -7,6 +7,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Each PR needs only its newest commit verified. Cancelling superseded emulator
+# runs prevents stale commits from occupying the hosted runner for 20+ minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
