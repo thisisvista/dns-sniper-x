@@ -78,7 +78,7 @@ internal fun E2eVerificationSection(
         if (uri != null) scope.launch {
             exporting = true
             try {
-                val rows = historyDao.getSlipNetE2eExportBatch(limit = 1000, offset = 0)
+                val rows = loadAllSlipNetE2eExportRows(historyDao)
                 val result = SlipNetE2eExportFormatter.format(rows)
                 check(result.exportedCount > 0) { "No FULL HTTP-verified DNSTT/VayDNS results are available yet." }
                 withContext(Dispatchers.IO) {
@@ -309,4 +309,24 @@ internal fun E2eVerificationSection(
             }
         }
     }
+}
+
+/**
+ * Export every qualifying record in bounded Room pages. The export list is
+ * intentionally not capped at an arbitrary first 1,000 successful resolvers.
+ */
+private suspend fun loadAllSlipNetE2eExportRows(
+    historyDao: E2eHistoryDao
+): List<SlipNetE2eExportRow> {
+    val pageSize = 500
+    val rows = mutableListOf<SlipNetE2eExportRow>()
+    var offset = 0
+    while (true) {
+        val page = historyDao.getSlipNetE2eExportBatch(limit = pageSize, offset = offset)
+        if (page.isEmpty()) break
+        rows.addAll(page)
+        offset += page.size
+        if (page.size < pageSize) break
+    }
+    return rows
 }
