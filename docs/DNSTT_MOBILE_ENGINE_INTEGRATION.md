@@ -58,3 +58,20 @@ The mobile binding's local TCP listener is a raw stream forwarder, not itself a 
 5. Require a valid HTTP response (2xx/3xx plus expected body or challenge token), not merely a TCP accept or SOCKS5 greeting.
 
 This avoids falsely counting the local listener or Noise handshake as successful internet access. The verification endpoint and expected response should be controlled/configurable so the test does not rely solely on one third-party URL.
+
+## Generated AAR API inspection (CI artifact 14749974720)
+
+The first CI-produced AAR was downloaded and inspected with `javap`. It contains `mobile.Mobile` and `mobile.DnsttClient` plus native libraries for ARM64, ARMv7 and x86_64. The Java-visible API is:
+
+- `Mobile.newClient(dnsServer, tunnelDomain, pubKeyHex, listenAddr)`
+- `DnsttClient.start()`, `stop()`, `isRunning()`
+- `DnsttClient.setTunFd(long)`, `setShareProxy(boolean)`, `isShareProxyEnabled()`
+
+Important API gaps found:
+
+1. The Go source defines `SetProtectSocket(ProtectSocketFunc)`, but gomobile does not expose that function-callback method in the generated Java API. The current AAR therefore cannot safely protect the resolver UDP socket from Android VPN routing.
+2. `SetTunFd` is exported but the pinned Go source only stores the descriptor; the inspected implementation does not route packets through it.
+3. The exported listener is a raw TCP forwarder, not a SOCKS5 proxy (despite an outdated source comment). Each TCP connection becomes a tunnel stream forwarded to the server's single configured upstream endpoint.
+4. The generated API does not expose `DialTunnel` because its return type is Go `net.Conn`.
+
+These findings mean the AAR is a successful build artifact, **not yet an integration-ready SniperX engine**. The next code change must add a gomobile-compatible socket-protection interface or another safe socket-protection mechanism, clarify/remove the unused TUN-FD API, and expose a narrow testable local-forwarding contract. Until then, do not run it inside a VPN path or mark any resolver E2E-ready.
