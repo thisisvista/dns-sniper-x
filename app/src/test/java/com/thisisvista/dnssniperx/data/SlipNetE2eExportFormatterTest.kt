@@ -40,7 +40,7 @@ class SlipNetE2eExportFormatterTest {
 
         assertEquals("1.1.1.1\n", result.resolverListText)
         assertEquals(1, result.exportedCount)
-        assertTrue(result.reportJson.contains("\"lastSuccessAt\": 100") || result.reportJson.contains("\"lastSuccessAt\": 200"))
+        assertTrue(result.reportJson.contains("\"lastSuccessAt\": 200"))
     }
 
     @Test
