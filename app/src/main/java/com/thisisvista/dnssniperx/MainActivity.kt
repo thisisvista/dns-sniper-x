@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -260,6 +262,18 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             isCollecting = isCollecting,
             selectedSourceIds = selectedSourceIds,
             onSourceSelectionChange = { selectedSourceIds = it },
+            onResetCollectionProgress = {
+                if (!isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting) {
+                    scope.launch {
+                        try {
+                            ProviderDiscoveryCoordinator(dao).resetAll()
+                            message = "Collection progress reset. Saved DNS entries, scan results, and history were preserved."
+                        } catch (exception: Exception) {
+                            message = "Could not reset collection progress: ${exception.message ?: "Unknown error"}"
+                        }
+                    }
+                }
+            },
             isImporting = isImporting,
             importProgress = importProgress,
             isScanning = isScanning,
@@ -582,6 +596,7 @@ private fun HomeContent(
     isCollecting: Boolean,
     selectedSourceIds: List<String>,
     onSourceSelectionChange: (List<String>) -> Unit,
+    onResetCollectionProgress: () -> Unit,
     isImporting: Boolean,
     importProgress: String,
     isScanning: Boolean,
@@ -604,6 +619,7 @@ private fun HomeContent(
     onDelete: (Long) -> Unit
 ) {
     var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
+    var showResetCollectionConfirmation by rememberSaveable { mutableStateOf(false) }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
@@ -737,6 +753,27 @@ private fun HomeContent(
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Collecting…")
             } else Text("Fetch public DNS lists")
+        }
+        OutlinedButton(
+            onClick = { showResetCollectionConfirmation = true },
+            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Reset collection progress (keep saved DNS)") }
+        if (showResetCollectionConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showResetCollectionConfirmation = false },
+                title = { Text("Reset collection progress?") },
+                text = { Text("The provider-range discovery cursor and saved discovery snapshot will be cleared so that discovery can start from the beginning. All saved DNS addresses, UDP/TCP scan results, source attribution, and history will remain unchanged. Public list downloads already start from the beginning each time.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showResetCollectionConfirmation = false
+                        onResetCollectionProgress()
+                    }) { Text("Reset progress") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetCollectionConfirmation = false }) { Text("Cancel") }
+                }
+            )
         }
 
         Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
