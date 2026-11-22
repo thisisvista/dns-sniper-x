@@ -140,3 +140,30 @@ Consequences for SniperX:
 
 This audit confirms the Kotlin bridge shape and build packaging, but does not
 claim that a standalone DNSTT-only AAR has already been built or validated.
+
+
+### NoizDNS vs. the separate DNSTT mobile binding (verified 2026-11-22)
+
+A follow-up inspection of the pinned NoizDNS submodule at
+`17ac5cf4e45cd09fa6f4bde09362e334dc4b8b55` confirms that its gomobile
+package is declared as Go package `noizdns` (Java/Kotlin binding namespace
+`noizdns.Noizdns`), not `mobile.Mobile`. It wraps DNSTT core and exposes a
+separate client API. This is useful evidence for a possible DNSTT-derived
+adapter, but it is not API-compatible with SlipNet's `DnsttBridge.kt`
+without an explicit adapter and behavior review.
+
+The pinned tree also records the separate `dnstt-mobile` gitlink at
+`b265e04c40835ec1bacd447fff79169e6c2c2233`. Its repository contents could
+not be retrieved through the available public GitHub endpoints during this
+audit (404), so its exported API, source license, and build instructions
+remain unverified. Do not substitute NoizDNS silently or claim exact
+compatibility with SlipNet's `mobile.Mobile` bridge.
+
+The upstream Gradle comments describe the Lite flavor as DNSTT-only, while
+the pinned Makefile explicitly passes `noizdns/mobile`,
+`vaydns-mobile/vaydns`, and `soar-mobile/soar` to the Lite gomobile build.
+Treat the actual build inputs as authoritative; verify generated AAR
+contents before deciding what can be reused. The prebuilt legacy
+`app/libs/golibs.aar` and `dnstt-sources.jar` are present in the upstream
+tree, but binary AAR contents could not be inspected with the text-only
+repository reader. They are not yet approved integration artifacts.
