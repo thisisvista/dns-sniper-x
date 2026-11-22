@@ -9,7 +9,7 @@ data class TunnelProfile(
     val protocol: TunnelProtocol,
     val serverHost: String,
     val serverPort: Int,
-    /** Public Noise key metadata; never a private key. */
+    /** 32-byte Noise server public key, encoded as 64 hexadecimal characters. */
     val dnsttServerPublicKey: String? = null,
     /** TLS name used for Slipstream certificate hostname verification. */
     val slipstreamTlsServerName: String? = null
@@ -23,7 +23,12 @@ data class TunnelProfile(
         if (serverPort !in 1..65535) add("Server port must be between 1 and 65535")
         when (protocol) {
             TunnelProtocol.DNSTT -> {
-                if (dnsttServerPublicKey.isNullOrBlank()) add("DNSTT server public key is required")
+                val key = dnsttServerPublicKey
+                if (key.isNullOrBlank()) {
+                    add("DNSTT server public key is required")
+                } else if (key.length != 64 || !key.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                    add("DNSTT public key must be exactly 32 bytes encoded as 64 hexadecimal characters")
+                }
                 if (slipstreamTlsServerName != null) add("Slipstream TLS server name is not valid for DNSTT")
             }
             TunnelProtocol.SLIPSTREAM -> {
