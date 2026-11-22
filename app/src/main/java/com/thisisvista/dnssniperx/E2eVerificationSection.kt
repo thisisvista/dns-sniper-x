@@ -13,6 +13,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thisisvista.dnssniperx.data.ActiveNetworkState
@@ -30,6 +33,7 @@ import com.thisisvista.dnssniperx.data.E2eVerificationCoordinator
 import com.thisisvista.dnssniperx.data.E2eVerificationMode
 import com.thisisvista.dnssniperx.data.ResolverDao
 import com.thisisvista.dnssniperx.data.SlipNetE2eEngine
+import com.thisisvista.dnssniperx.data.SlipNetE2eExportFormatter
 import com.thisisvista.dnssniperx.data.TunnelProfile
 import com.thisisvista.dnssniperx.data.TunnelProfileMapper
 import com.thisisvista.dnssniperx.data.TunnelProtocol
@@ -38,6 +42,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun E2eVerificationSection(
@@ -55,14 +61,61 @@ internal fun E2eVerificationSection(
     var elapsed by rememberSaveable { mutableStateOf<Long?>(null) }
     var savedCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var loadingCandidates by remember { mutableStateOf(false) }
+    var exporting by remember { mutableStateOf(false) }
+    var exportMessage by rememberSaveable { mutableStateOf("") }
     var testJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
     val attemptsFlow = remember(resolverIp) {
         if (resolverIp.isBlank()) flowOf(emptyList())
         else historyDao.observeResolverAttempts(resolverIp.trim(), 53, 10)
     }
     val attempts by attemptsFlow.collectAsState(initial = emptyList())
+    val resolverListExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            exporting = true
+            try {
+                val rows = historyDao.getSlipNetE2eExportBatch(limit = 1000, offset = 0)
+                val result = SlipNetE2eExportFormatter.format(rows)
+                check(result.exportedCount > 0) { "No FULL HTTP-verified DNSTT/VayDNS results are available yet." }
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                        it.write(result.resolverListText)
+                    } ?: error("Could not create the selected file.")
+                }
+                exportMessage = "Exported ${result.exportedCount} FULL E2E-verified DNS address(es) for SlipNet."
+            } catch (failure: Exception) {
+                exportMessage = failure.message ?: "SlipNet resolver export failed."
+            } finally {
+                exporting = false
+            }
+        }
+    }
+    val profileReportExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            exporting = true
+            try {
+                val rows = historyDao.getSlipNetE2eExportBatch(limit = 1000, offset = 0)
+                val result = SlipNetE2eExportFormatter.format(rows)
+                check(result.exportedCount > 0) { "No FULL HTTP-verified DNSTT/VayDNS results are available yet." }
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                        it.write(result.reportJson)
+                    } ?: error("Could not create the selected file.")
+                }
+                exportMessage = "Exported detailed engine/profile evidence for ${result.exportedCount} result(s)."
+            } catch (failure: Exception) {
+                exportMessage = failure.message ?: "SlipNet E2E report export failed."
+            } finally {
+                exporting = false
+            }
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -220,6 +273,28 @@ internal fun E2eVerificationSection(
             Text("Network: ${network.transport.name} · ${network.providerName ?: network.operatorName ?: "provider unknown"}", style = MaterialTheme.typography.labelSmall)
             Text("Result: $status${elapsed?.let { " · ${it} ms" } ?: ""}", fontWeight = FontWeight.SemiBold)
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "SlipNet export includes only the latest FULL HTTP-verified DNSTT/VayDNS successes. UDP/TCP DNS checks and handshake-only results are never exported as E2E passes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { resolverListExport.launch("dns-sniperx-slipnet-e2e.txt") },
+                enabled = !running && !exporting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (exporting) "Preparing verified export…" else "Export FULL E2E DNS list for SlipNet")
+            }
+            OutlinedButton(
+                onClick = { profileReportExport.launch("dns-sniperx-slipnet-e2e-report.json") },
+                enabled = !running && !exporting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Export engine and profile evidence (JSON)")
+            }
+            if (exportMessage.isNotBlank()) {
+                Text(exportMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (attempts.isNotEmpty()) {
                 Text("Recent attempts for this resolver", fontWeight = FontWeight.SemiBold)
                 attempts.take(5).forEach { attempt ->
