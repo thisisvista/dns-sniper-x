@@ -1,6 +1,8 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
@@ -38,14 +40,10 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         var phase = E2ePhase.NOT_STARTED
         var client: mobile.DnsttClient? = null
         val activeSocket = AtomicReference<Socket?>(null)
-        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion(
-            onCancelling = true,
-            invokeImmediately = true
-        ) { cause ->
-            if (cause is CancellationException) {
-                try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
-            }
-        }
+        val cancellationHandle = closeSocketOnJobCancellation(
+            currentCoroutineContext().job,
+            activeSocket
+        )
         var result: SlipNetE2eResult
         fun reportPhase(next: E2ePhase, label: String) {
             phase = next
@@ -302,4 +300,19 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
 
     private fun elapsedMs(startedAt: Long): Long =
         (System.nanoTime() - startedAt) / 1_000_000L
+}
+
+
+/** Close the currently published blocking socket as soon as its coroutine job is cancelled. */
+@OptIn(InternalCoroutinesApi::class)
+internal fun closeSocketOnJobCancellation(
+    job: Job,
+    activeSocket: AtomicReference<Socket?>
+): DisposableHandle = job.invokeOnCompletion(
+    onCancelling = true,
+    invokeImmediately = true
+) { cause ->
+    if (cause is CancellationException) {
+        try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
+    }
 }
