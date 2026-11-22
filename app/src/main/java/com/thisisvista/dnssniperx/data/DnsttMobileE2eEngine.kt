@@ -7,7 +7,6 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URI
@@ -51,8 +50,10 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             phase = E2ePhase.TUNNEL_SETUP
 
             val resolver = resolverEndpoint(request.resolverAddress, request.resolverPort)
-            val localPort = reserveLoopbackPort()
-            val listenAddress = "127.0.0.1:$localPort"
+            // Ask Go to bind an OS-assigned port, then read the actual bound
+            // port after Start. Reserving and closing a ServerSocket here would
+            // leave a race in which another process could take that port.
+            val listenAddress = "127.0.0.1:0"
             val publicKey = requireNotNull(request.profile.dnsttServerPublicKey)
 
             // DNSTT forwards to the server-side UPSTREAMADDR; serverPort in the
@@ -69,6 +70,10 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             phase = E2ePhase.HANDSHAKE
             dnsttClient.start()
             check(dnsttClient.isRunning) { "DNSTT client did not enter the running state" }
+            val localPort = dnsttClient.getListenPort()
+            check(localPort in 1..65535) {
+                "DNSTT client started without exposing a valid local listener port"
+            }
 
             if (request.mode == E2eVerificationMode.HANDSHAKE) {
                 // The pinned gomobile API exposes isRunning(), not a completed
@@ -131,9 +136,6 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         val host = if (isIpv6) "[$address]" else address
         return "$host:$port"
     }
-
-    private fun reserveLoopbackPort(): Int =
-        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
 
     internal fun verifyHttpThroughSocks5(
         proxyPort: Int,
