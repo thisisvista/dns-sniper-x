@@ -55,6 +55,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             val listenAddress = "127.0.0.1:$localPort"
             val publicKey = requireNotNull(request.profile.dnsttServerPublicKey)
 
+            // DNSTT forwards to the server-side UPSTREAMADDR; serverPort in the
+            // generic profile is not a client-selectable DNSTT destination.
             client = Mobile.newClient(
                 resolver,
                 request.profile.serverHost,
@@ -81,11 +83,14 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                     verificationUrl = request.verificationUrl,
                     timeoutMs = request.timeoutMs
                 )
+                val responseAccepted = request.expectedHttpStatusCode?.let { statusCode == it }
+                    ?: (statusCode in 200..399)
                 result = SlipNetE2eResult(
-                    status = if (statusCode in 200..399) E2eStatus.FULL_PASS else E2eStatus.FULL_FAIL,
+                    status = if (responseAccepted) E2eStatus.FULL_PASS else E2eStatus.FULL_FAIL,
                     phase = E2ePhase.COMPLETED,
                     elapsedMs = elapsedMs(startedAt),
-                    errorMessage = if (statusCode in 200..399) null else "Verification endpoint returned HTTP $statusCode",
+                    errorMessage = if (responseAccepted) null else
+                        "Verification endpoint returned HTTP $statusCode; expected ${request.expectedHttpStatusCode ?: "a 2xx/3xx response"}",
                     httpStatusCode = statusCode
                 )
             }
