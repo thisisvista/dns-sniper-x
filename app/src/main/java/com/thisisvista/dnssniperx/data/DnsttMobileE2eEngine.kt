@@ -111,11 +111,18 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
     private fun resolverEndpoint(address: String, port: Int): String {
         require(port in 1..65535) { "Invalid resolver port" }
         require(address.isNotBlank() && address.none(Char::isWhitespace)) { "Invalid resolver address" }
-        // Candidate resolvers are IP literals. Do not resolve hostnames through
-        // Android's configured DNS, which would invalidate this candidate test.
+        // Candidate resolvers are IP literals. Reject hostnames before calling
+        // InetAddress so Android's configured DNS cannot resolve the candidate.
+        val ipv4Parts = address.split('.')
+        val isIpv4 = ipv4Parts.size == 4 && ipv4Parts.all { part ->
+            part.isNotEmpty() && part.all(Char::isDigit) && part.toIntOrNull() in 0..255
+        }
+        val isIpv6 = address.contains(':') &&
+            address.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it == ':' || it == '.' }
+        require(isIpv4 || isIpv6) { "Resolver must be an IPv4 or IPv6 literal" }
         val parsed = InetAddress.getByName(address)
         require(parsed.hostAddress != null) { "Invalid resolver IP address" }
-        val host = if (address.contains(':')) "[$address]" else address
+        val host = if (isIpv6) "[$address]" else address
         return "$host:$port"
     }
 
