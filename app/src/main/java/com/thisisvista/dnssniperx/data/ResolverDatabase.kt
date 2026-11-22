@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class, ProviderEntity::class, ResolverSourceEntity::class, ResolverEvidenceEntity::class, ProviderDiscoveryStateEntity::class, E2eHistoryEntity::class], version = 13, exportSchema = false)
+@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class, ProviderEntity::class, ResolverSourceEntity::class, ResolverEvidenceEntity::class, ProviderDiscoveryStateEntity::class, E2eHistoryEntity::class], version = 14, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
     abstract fun e2eHistoryDao(): E2eHistoryDao
@@ -264,6 +264,19 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Preserve the exact configuration used for each attempt. Joining
+                // the mutable profile table at export time could otherwise attach
+                // a newer, untested config to an older successful result.
+                database.execSQL("ALTER TABLE e2e_history ADD COLUMN profileName TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE e2e_history ADD COLUMN serverHost TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE e2e_history ADD COLUMN serverPort INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE e2e_history ADD COLUMN dnsttServerPublicKey TEXT")
+                database.execSQL("ALTER TABLE e2e_history ADD COLUMN slipstreamTlsServerName TEXT")
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -272,7 +285,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also { instance = it }
             }
     }
 }
