@@ -34,7 +34,7 @@ class TunnelProfileRepositoryTest {
             protocol = TunnelProtocol.DNSTT,
             serverHost = "tunnel.example",
             serverPort = 5300,
-            dnsttServerPublicKey = "public-noise-key"
+            dnsttServerPublicKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         )
 
         try {
@@ -54,7 +54,7 @@ class TunnelProfileRepositoryTest {
             assertArrayEquals(otherCredential, repository.getSecret(otherProfileId, "private-key"))
 
             val persistedMetadata = database.resolverDao().findTunnelProfile(profileId)
-            assertEquals("public-noise-key", persistedMetadata?.dnsttServerPublicKey)
+            assertEquals("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", persistedMetadata?.dnsttServerPublicKey)
             assertFalse(persistedMetadata.toString().contains("private-test-credential"))
 
             val missingProfileResult = runCatching {
