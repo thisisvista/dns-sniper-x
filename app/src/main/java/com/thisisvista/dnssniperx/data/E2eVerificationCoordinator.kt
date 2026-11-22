@@ -2,7 +2,9 @@ package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Runs a selected tunnel adapter against one resolver and persists immutable
@@ -27,6 +29,7 @@ class E2eVerificationCoordinator(
         require(resolverAddress.isNotBlank()) { "Resolver address is required" }
         require(resolverPort in 1..65535) { "Resolver port must be between 1 and 65535" }
         require(profile.isValid()) { profile.validate().joinToString("; ") }
+        require(timeoutMs in 1_000..120_000) { "E2E timeout must be between 1 and 120 seconds" }
 
         if (!network.isConnected || network.transport == ActiveNetworkTransport.NONE) {
             return SlipNetE2eResult(
@@ -54,7 +57,16 @@ class E2eVerificationCoordinator(
             )
         } else {
             try {
-                engine.verify(request, onPhase)
+                withTimeout(timeoutMs) {
+                    engine.verify(request, onPhase)
+                }
+            } catch (timeout: TimeoutCancellationException) {
+                SlipNetE2eResult(
+                    status = E2eStatus.TIMEOUT,
+                    phase = E2ePhase.NOT_STARTED,
+                    elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L,
+                    errorMessage = "E2E verification exceeded the ${timeoutMs} ms total time limit"
+                )
             } catch (cancelled: CancellationException) {
                 // Cancellation is evidence too. Persist it even though the caller
                 // must still receive the cancellation signal and stop its UI job.
