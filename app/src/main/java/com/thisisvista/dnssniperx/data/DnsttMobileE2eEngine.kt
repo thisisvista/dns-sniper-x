@@ -115,7 +115,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         // InetAddress so Android's configured DNS cannot resolve the candidate.
         val ipv4Parts = address.split('.')
         val isIpv4 = ipv4Parts.size == 4 && ipv4Parts.all { part ->
-            part.isNotEmpty() && part.all(Char::isDigit) && part.toIntOrNull() in 0..255
+            part.isNotEmpty() && part.all(Char::isDigit) &&
+                (part.toIntOrNull()?.let { it in 0..255 } == true)
         }
         val isIpv6 = address.contains(':') &&
             address.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' || it == ':' || it == '.' }
@@ -143,13 +144,14 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         var rawSocket: Socket? = null
         var activeSocket: Socket? = null
         try {
-            rawSocket = Socket()
-            rawSocket.connect(java.net.InetSocketAddress("127.0.0.1", proxyPort), timeout)
-            rawSocket.soTimeout = timeout
-            rawSocket.tcpNoDelay = true
+            val connectedRawSocket = Socket()
+            rawSocket = connectedRawSocket
+            connectedRawSocket.connect(java.net.InetSocketAddress("127.0.0.1", proxyPort), timeout)
+            connectedRawSocket.soTimeout = timeout
+            connectedRawSocket.tcpNoDelay = true
 
-            val input = rawSocket.getInputStream()
-            val output = rawSocket.getOutputStream()
+            val input = connectedRawSocket.getInputStream()
+            val output = connectedRawSocket.getOutputStream()
 
             // SOCKS5 greeting: version 5, one method, no authentication.
             output.write(byteArrayOf(0x05, 0x01, 0x00))
@@ -193,10 +195,11 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
 
             activeSocket = if (tls) {
                 (SSLSocketFactory.getDefault() as SSLSocketFactory)
-                    .createSocket(rawSocket, host, port, true) as SSLSocket
+                    .createSocket(connectedRawSocket, host, port, true) as SSLSocket
             } else {
-                rawSocket
+                connectedRawSocket
             }
+            activeSocket = activeSocket
             activeSocket.soTimeout = timeout
             if (activeSocket is SSLSocket) activeSocket.startHandshake()
 
