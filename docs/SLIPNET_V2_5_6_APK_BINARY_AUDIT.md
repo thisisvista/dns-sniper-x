@@ -112,3 +112,19 @@ The matching `.gitmodules` declares separate repositories for DNSTT, DNSTT mobil
 - Build a minimal DNSTT binding for SniperX rather than importing SlipNet's broad Go AAR.
 - Port only the required lifecycle and protocol configuration into a SniperX-owned adapter; do not copy the entire SlipNet VPN service or app architecture.
 - Keep Slipstream and HEV/TUN as separately gated integrations after DNSTT is reproducibly built and verified.
+
+
+## DNSTT mobile dependency investigation
+
+At the APK-matching SlipNet commit, the `dnstt-mobile` submodule is pinned to gitlink `b265e04c40835ec1bacd447fff79169e6c2c2233`. The configured submodule URL is `https://github.com/anonvector/dnstt-mobile.git`, but that repository/revision is not currently retrievable through the public GitHub repository API (404). This is a source-provenance blocker: a similarly named fork is not automatically an acceptable replacement.
+
+The matching Kotlin bridge calls `mobile.Mobile.newClient(...)` and methods on `mobile.DnsttClient`, including start/stop, running state, resolver mode, RR spread, authoritative mode, payload and SOCKS proxy configuration. The matching app tree also contains `app/libs/dnstt-sources.jar` (9,780 bytes) and a legacy `golibs.aar`; however, the current Gradle flavor dependencies point to `golibs-full.aar` / `golibs-lite.aar`. The checked-in gomobile Makefile builds those flavor AARs from NoizDNS, VayDNS and Soar (plus Snowflake for Full), and does not list `dnstt-mobile`. Therefore, the DNSTT binding appears to be supplied by a separate/legacy artifact path and must be resolved from its exact build provenance before reuse.
+
+Public repositories named `dnstt-mobile` were found under unrelated owners. Their current source includes a broadly similar `mobile` package, but no matching pinned commit has been established. These forks are leads for source comparison only; none has been imported or treated as the authoritative source.
+
+### Current decision
+
+- Do not substitute a similarly named fork or old AAR for the pinned submodule without a commit-level source comparison.
+- Do not add the legacy `golibs.aar` or APK-extracted `libgojni.so` to SniperX.
+- Continue by resolving the original DNSTT mobile source and its build recipe, or independently implement a narrowly scoped gomobile binding from the pinned DNSTT core source with a documented provenance/license chain.
+- Keep the SniperX E2E engine in its unavailable/not-configured state until the Android binding is built and verified against a controlled DNSTT server with real application traffic.
