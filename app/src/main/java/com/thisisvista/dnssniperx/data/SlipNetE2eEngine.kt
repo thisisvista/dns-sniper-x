@@ -32,6 +32,7 @@ enum class E2ePhase {
 enum class E2eStatus {
     NOT_CONFIGURED,
     NOT_TESTED,
+    CANCELLED,
     HANDSHAKE_PASS,
     HANDSHAKE_FAIL,
     FULL_PASS,
@@ -94,11 +95,11 @@ object E2eResultGate {
         requestedMode: E2eVerificationMode,
         result: SlipNetE2eResult
     ): E2eStatus {
-        // These are workflow states, not failed network tests. Preserve them so
-        // reports never imply that an unavailable engine actually attempted E2E.
+        // Workflow states are not failed network tests; preserve them verbatim.
         when (result.status) {
-            E2eStatus.NOT_CONFIGURED -> return E2eStatus.NOT_CONFIGURED
-            E2eStatus.NOT_TESTED -> return E2eStatus.NOT_TESTED
+            E2eStatus.NOT_CONFIGURED,
+            E2eStatus.NOT_TESTED,
+            E2eStatus.CANCELLED -> return result.status
             else -> Unit
         }
 
