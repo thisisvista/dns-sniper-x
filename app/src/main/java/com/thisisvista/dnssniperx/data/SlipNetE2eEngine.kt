@@ -10,7 +10,8 @@ package com.thisisvista.dnssniperx.data
 interface SlipNetE2eEngine {
     suspend fun verify(
         request: SlipNetE2eRequest,
-        onPhase: (String) -> Unit = {}
+        onPhase: (String) -> Unit = {},
+        onPhaseChanged: (E2ePhase) -> Unit = {}
     ): SlipNetE2eResult
 }
 
