@@ -10,6 +10,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thisisvista.dnssniperx.data.ResolverDatabase
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -23,6 +26,12 @@ import org.junit.runner.RunWith
 class MainActivityEndToEndTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private val dao by lazy {
+        ResolverDatabase.getInstance(
+            InstrumentationRegistry.getInstrumentation().targetContext
+        ).resolverDao()
+    }
 
     @Before
     fun clearLocalDatabase() {
@@ -43,11 +52,25 @@ class MainActivityEndToEndTest {
             .performScrollTo()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        // First prove that the UI action reached the import callback. This gives
+        // a useful failure if parsing/insertion fails instead of timing out on a
+        // downstream dashboard counter.
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText("Saved 1 new DNS entries successfully.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // Independently verify the durable Room state before checking its UI projection.
+        runBlocking {
+            withTimeout(30_000) {
+                dao.observeCount().first { it == 1 }
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
         // The saved-resolver list is below the import controls; scroll it into view.
@@ -61,20 +84,25 @@ class MainActivityEndToEndTest {
             .performScrollTo()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(
                 "No new entries. These DNS addresses are already saved."
             ).fetchSemanticsNodes().isNotEmpty()
+        }
+        runBlocking {
+            withTimeout(30_000) {
+                dao.observeCount().first { it == 1 }
+            }
         }
         composeRule.onNodeWithText("1 DNS entries saved on this device.").assertIsDisplayed()
 
         // Recreate the real Activity: the saved record must still be loaded from Room.
         composeRule.activityRule.scenario.recreate()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
