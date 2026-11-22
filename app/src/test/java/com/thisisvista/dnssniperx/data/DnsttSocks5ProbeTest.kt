@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import org.junit.Test
 import java.io.BufferedReader
 import java.io.DataInputStream
@@ -97,6 +99,8 @@ class DnsttSocks5ProbeTest {
         val publishedSocket = AtomicReference<Socket?>(null)
         val socketPublished = CountDownLatch(1)
         val probeFailure = AtomicReference<Throwable?>(null)
+        val cancellationJob = Job()
+        val cancellationHandle = closeSocketOnJobCancellation(cancellationJob, publishedSocket)
         val worker = thread(isDaemon = true) {
             try {
                 DnsttMobileE2eEngine().verifyHttpThroughSocks5(
@@ -124,7 +128,7 @@ class DnsttSocks5ProbeTest {
             DataInputStream(acceptedSocket.getInputStream()).readFully(greeting)
             assertEquals(listOf(5, 1, 0), greeting.map { it.toInt() and 0xff })
 
-            publishedSocket.get()?.close()
+            cancellationJob.cancel(CancellationException("Test cancellation"))
 
             worker.join(1_500)
             assertFalse("Probe remained blocked after its socket was closed", worker.isAlive)
@@ -132,6 +136,8 @@ class DnsttSocks5ProbeTest {
             assertNotNull("Closing the socket should fail the blocked probe", failure)
             assertTrue("Expected an I/O exception, got $failure", failure is IOException)
         } finally {
+            cancellationJob.cancel()
+            cancellationHandle.dispose()
             publishedSocket.get()?.close()
             acceptedSocket?.close()
             server.close()
