@@ -71,11 +71,10 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             check(dnsttClient.isRunning) { "DNSTT client did not enter the running state" }
 
             if (request.mode == E2eVerificationMode.HANDSHAKE) {
-                result = SlipNetE2eResult(
-                    status = E2eStatus.HANDSHAKE_PASS,
-                    phase = E2ePhase.COMPLETED,
-                    elapsedMs = elapsedMs(startedAt)
-                )
+                // The pinned gomobile API exposes isRunning(), not a completed
+                // Noise-handshake signal. Do not turn a started client into a
+                // false-positive handshake pass.
+                result = handshakeStateOnlyResult(elapsedMs(startedAt))
             } else {
                 onPhase("Verifying SOCKS5 forwarding and HTTP traffic")
                 phase = E2ePhase.APPLICATION_REQUEST
@@ -207,7 +206,15 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             }
             activeSocket = tunnelSocket
             tunnelSocket.soTimeout = timeout
-            if (tunnelSocket is SSLSocket) tunnelSocket.startHandshake()
+            if (tunnelSocket is SSLSocket) {
+                // SSLSocket does not enable HTTPS hostname verification by
+                // default. Require certificate identity validation for the
+                // requested host before trusting the tunneled HTTP response.
+                tunnelSocket.sslParameters = tunnelSocket.sslParameters.apply {
+                    endpointIdentificationAlgorithm = "HTTPS"
+                }
+                tunnelSocket.startHandshake()
+            }
 
             val path = buildString {
                 append(uri.rawPath?.takeIf { it.isNotEmpty() } ?: "/")
@@ -234,6 +241,14 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             }
         }
     }
+
+    internal fun handshakeStateOnlyResult(elapsedMs: Long): SlipNetE2eResult =
+        SlipNetE2eResult(
+            status = E2eStatus.NOT_TESTED,
+            phase = E2ePhase.HANDSHAKE,
+            elapsedMs = elapsedMs,
+            errorMessage = "The DNSTT binding exposes client-running state but no handshake-completion signal; run FULL verification to prove tunneled application traffic."
+        )
 
     private fun readFully(input: java.io.InputStream, target: ByteArray) {
         var offset = 0
