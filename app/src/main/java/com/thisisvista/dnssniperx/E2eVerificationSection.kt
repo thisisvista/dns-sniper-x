@@ -53,6 +53,8 @@ internal fun E2eVerificationSection(
     var status by rememberSaveable { mutableStateOf("Not tested") }
     var detail by rememberSaveable { mutableStateOf("") }
     var elapsed by rememberSaveable { mutableStateOf<Long?>(null) }
+    var savedCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loadingCandidates by remember { mutableStateOf(false) }
     var testJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
@@ -85,6 +87,33 @@ internal fun E2eVerificationSection(
                 enabled = !running,
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        loadingCandidates = true
+                        try {
+                            savedCandidates = resolverDao.getSlipNetExportBatch(limit = 15, offset = 0)
+                                .map { it.address }
+                                .distinct()
+                        } finally {
+                            loadingCandidates = false
+                        }
+                    }
+                },
+                enabled = !running && !loadingCandidates,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (loadingCandidates) "Loading saved DNS candidates…" else "Choose from saved working DNS")
+            }
+            savedCandidates.take(10).forEach { candidate ->
+                OutlinedButton(
+                    onClick = { resolverIp = candidate },
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(candidate)
+                }
+            }
             OutlinedTextField(
                 value = tunnelDomain,
                 onValueChange = { tunnelDomain = it },
