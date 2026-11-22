@@ -88,10 +88,12 @@ class E2eHistoryDaoTest {
         val fakeEngine = object : SlipNetE2eEngine {
             override suspend fun verify(
                 request: SlipNetE2eRequest,
-                onPhase: (String) -> Unit
+                onPhase: (String) -> Unit,
+                onPhaseChanged: (E2ePhase) -> Unit
             ): SlipNetE2eResult {
                 assertEquals("10.20.30.40", request.resolverAddress)
                 assertEquals(TunnelProtocol.DNSTT, request.profile.protocol)
+                onPhaseChanged(E2ePhase.APPLICATION_REQUEST)
                 onPhase("HTTP verified")
                 return SlipNetE2eResult(
                     status = E2eStatus.FULL_PASS,
@@ -153,8 +155,10 @@ class E2eHistoryDaoTest {
         val cancelledEngine = object : SlipNetE2eEngine {
             override suspend fun verify(
                 request: SlipNetE2eRequest,
-                onPhase: (String) -> Unit
+                onPhase: (String) -> Unit,
+                onPhaseChanged: (E2ePhase) -> Unit
             ): SlipNetE2eResult {
+                onPhaseChanged(E2ePhase.HANDSHAKE)
                 throw CancellationException("cancelled in test")
             }
         }
@@ -179,6 +183,7 @@ class E2eHistoryDaoTest {
         assertEquals(true, cancellationPropagated)
         val saved = dao.getResolverAttempts("10.20.30.42", 53).single()
         assertEquals("CANCELLED", saved.status)
+        assertEquals("HANDSHAKE", saved.phase)
         assertEquals("CELLULAR:mci", saved.networkKey)
     }
 
@@ -187,8 +192,10 @@ class E2eHistoryDaoTest {
         val waitingEngine = object : SlipNetE2eEngine {
             override suspend fun verify(
                 request: SlipNetE2eRequest,
-                onPhase: (String) -> Unit
+                onPhase: (String) -> Unit,
+                onPhaseChanged: (E2ePhase) -> Unit
             ): SlipNetE2eResult {
+                onPhaseChanged(E2ePhase.APPLICATION_REQUEST)
                 awaitCancellation()
             }
         }
@@ -209,6 +216,7 @@ class E2eHistoryDaoTest {
         assertEquals(E2eStatus.TIMEOUT, result.status)
         val saved = dao.getResolverAttempts("10.20.30.43", 53).single()
         assertEquals("TIMEOUT", saved.status)
+        assertEquals("APPLICATION_REQUEST", saved.phase)
         assertEquals("CELLULAR:mci", saved.networkKey)
     }
 
