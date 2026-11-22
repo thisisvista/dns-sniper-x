@@ -69,5 +69,10 @@ class ProviderDiscoveryCoordinator(
         dao.deleteProviderDiscoveryState(providerIds.toSortedSet().joinToString(","))
     }
 
+    /** Resets only discovery cursors/snapshots; resolver and scan records remain untouched. */
+    suspend fun resetAll() {
+        dao.deleteAllProviderDiscoveryStates()
+    }
+
     companion object { const val SNAPSHOT_TTL_MS = 24L * 60L * 60L * 1000L }
 }
