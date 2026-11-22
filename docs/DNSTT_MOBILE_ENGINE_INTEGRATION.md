@@ -89,3 +89,18 @@ A unit test protects the no-false-positive handshake behavior. These changes do 
 ## Current SniperX wiring boundary
 
 `DnsttMobileE2eEngine` now implements the engine contract and performs the DNSTT start/stop lifecycle plus SOCKS5 CONNECT and HTTP status verification. Its local SOCKS5 protocol path has a deterministic loopback test. However, the current application tree does not yet inject this engine into the resolver scan workflow or persist its result against the active network/provider evidence. The engine is therefore an implemented component under test, not yet an end-user feature exposed by the UI. Do not claim that the app can currently scan candidates and automatically promote DNSTT E2E winners.
+
+
+## Listener allocation race hardening
+
+The pinned Go binding is adapted during the reproducible build to expose
+`GetListenPort()`, which returns the port of the listener that the Go client
+actually bound. Kotlin now asks Go to bind `127.0.0.1:0` and reads that port
+after `Start()` completes. This removes the previous reserve-then-close
+port-allocation race, where another local process could claim the port before
+the Go listener binds it.
+
+The AAR build now fails unless the generated Java API includes
+`getListenPort()`, in addition to the socket-protection callback methods.
+This is a build-time API contract check; it does not replace runtime tunnel
+testing.
