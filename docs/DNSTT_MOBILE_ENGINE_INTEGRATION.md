@@ -78,6 +78,14 @@ Important API gaps found:
 These findings mean the AAR is a successful build artifact, **not yet an integration-ready SniperX engine**. The build script now applies a guarded source transformation before binding: it replaces the function callback with a gomobile-compatible `SocketProtector` interface and removes the unused TUN-FD setter/field. CI must verify that the generated Java API exposes `setSocketProtector` and the callback's `protect(long)` method. Even after it builds, the Kotlin adapter must wire this callback to `VpnService.protect(fd)` when running alongside an Android VPN service, and that path needs on-device testing. A local fake-SOCKS5 HTTP probe test has been added; a real controlled DNSTT server test remains outstanding.
 
 
+## Evidence and TLS hardening follow-up
+
+The Kotlin adapter must not report `HANDSHAKE_PASS` merely because `DnsttClient.isRunning()` becomes true. That property confirms the client lifecycle state, not completion of the Noise handshake. The adapter now returns `NOT_TESTED` for handshake-only requests until the binding exposes a trustworthy handshake-completion signal. Full verification remains the path that can prove a real application request traversed the tunnel.
+
+HTTPS verification now enables the TLS endpoint-identification algorithm (`HTTPS`) on the layered SSLSocket before the handshake. This ensures the certificate identity is checked against the requested URL host rather than accepting any certificate presented by the upstream.
+
+A unit test protects the no-false-positive handshake behavior. These changes do not implement a VPN service or socket-protection wiring; the app manifest still has no VpnService declaration, and a real controlled DNSTT server test remains a release blocker.
+
 ## Current SniperX wiring boundary
 
 `DnsttMobileE2eEngine` now implements the engine contract and performs the DNSTT start/stop lifecycle plus SOCKS5 CONNECT and HTTP status verification. Its local SOCKS5 protocol path has a deterministic loopback test. However, the current application tree does not yet inject this engine into the resolver scan workflow or persist its result against the active network/provider evidence. The engine is therefore an implemented component under test, not yet an end-user feature exposed by the UI. Do not claim that the app can currently scan candidates and automatically promote DNSTT E2E winners.
