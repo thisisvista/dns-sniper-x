@@ -1,6 +1,8 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Runs a selected tunnel adapter against one resolver and persists immutable
@@ -54,6 +56,25 @@ class E2eVerificationCoordinator(
             try {
                 engine.verify(request, onPhase)
             } catch (cancelled: CancellationException) {
+                // Cancellation is evidence too. Persist it even though the caller
+                // must still receive the cancellation signal and stop its UI job.
+                withContext(NonCancellable) {
+                    historyDao.insertAttempt(
+                        historyRecord(
+                            resolverAddress = resolverAddress,
+                            resolverPort = resolverPort,
+                            profile = profile,
+                            mode = mode,
+                            network = network,
+                            result = SlipNetE2eResult(
+                                status = E2eStatus.CANCELLED,
+                                phase = E2ePhase.NOT_STARTED,
+                                elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L,
+                                errorMessage = "E2E verification was cancelled"
+                            )
+                        )
+                    )
+                }
                 throw cancelled
             } catch (failure: Exception) {
                 SlipNetE2eResult(
@@ -68,26 +89,42 @@ class E2eVerificationCoordinator(
         val result = rawResult.copy(status = acceptedStatus)
 
         historyDao.insertAttempt(
-            E2eHistoryEntity(
+            historyRecord(
                 resolverAddress = resolverAddress,
                 resolverPort = resolverPort,
-                networkKey = networkKey(network),
-                networkTransport = network.transport.name,
-                networkLabel = network.providerName ?: network.operatorName,
-                operatorName = network.operatorName,
-                providerId = network.providerId,
-                profileId = profile.id,
-                tunnelProtocol = profile.protocol.name,
-                verificationMode = mode.name,
-                status = result.status.name,
-                phase = result.phase.name,
-                elapsedMs = result.elapsedMs,
-                httpStatusCode = result.httpStatusCode,
-                errorMessage = result.errorMessage
+                profile = profile,
+                mode = mode,
+                network = network,
+                result = result
             )
         )
         return result
     }
+
+    private fun historyRecord(
+        resolverAddress: String,
+        resolverPort: Int,
+        profile: TunnelProfile,
+        mode: E2eVerificationMode,
+        network: ActiveNetworkState,
+        result: SlipNetE2eResult
+    ) = E2eHistoryEntity(
+        resolverAddress = resolverAddress,
+        resolverPort = resolverPort,
+        networkKey = networkKey(network),
+        networkTransport = network.transport.name,
+        networkLabel = network.providerName ?: network.operatorName,
+        operatorName = network.operatorName,
+        providerId = network.providerId,
+        profileId = profile.id,
+        tunnelProtocol = profile.protocol.name,
+        verificationMode = mode.name,
+        status = result.status.name,
+        phase = result.phase.name,
+        elapsedMs = result.elapsedMs,
+        httpStatusCode = result.httpStatusCode,
+        errorMessage = result.errorMessage
+    )
 
     private fun networkKey(network: ActiveNetworkState): String {
         val operator = network.operatorName
