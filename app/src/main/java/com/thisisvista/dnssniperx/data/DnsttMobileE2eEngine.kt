@@ -2,7 +2,11 @@ package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.job
+import java.util.concurrent.atomic.AtomicReference
 import mobile.Mobile
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -24,6 +28,7 @@ import javax.net.ssl.SSLSocketFactory
  */
 class DnsttMobileE2eEngine : SlipNetE2eEngine {
 
+    @OptIn(InternalCoroutinesApi::class)
     override suspend fun verify(
         request: SlipNetE2eRequest,
         onPhase: (String) -> Unit,
@@ -32,6 +37,15 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         val startedAt = System.nanoTime()
         var phase = E2ePhase.NOT_STARTED
         var client: mobile.DnsttClient? = null
+        val activeSocket = AtomicReference<Socket?>(null)
+        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion(
+            onCancelling = true,
+            invokeImmediately = true
+        ) { cause ->
+            if (cause is CancellationException) {
+                try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
+            }
+        }
         var result: SlipNetE2eResult
         fun reportPhase(next: E2ePhase, label: String) {
             phase = next
@@ -90,7 +104,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 val statusCode = verifyHttpThroughSocks5(
                     proxyPort = localPort.toInt(),
                     verificationUrl = request.verificationUrl,
-                    timeoutMs = request.timeoutMs
+                    timeoutMs = request.timeoutMs,
+                    onSocket = { socket -> activeSocket.set(socket) }
                 )
                 val responseAccepted = request.expectedHttpStatusCode?.let { statusCode == it }
                     ?: (statusCode in 200..399)
@@ -114,6 +129,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 errorMessage = e.message ?: e.javaClass.simpleName
             )
         } finally {
+            cancellationHandle.dispose()
+            try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
             try {
                 client?.stop()
             } catch (_: Exception) {
@@ -146,7 +163,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
     internal fun verifyHttpThroughSocks5(
         proxyPort: Int,
         verificationUrl: String,
-        timeoutMs: Long
+        timeoutMs: Long,
+        onSocket: (Socket) -> Unit = {}
     ): Int {
         val uri = URI(verificationUrl)
         val host = requireNotNull(uri.host) { "Verification URL has no host" }
@@ -159,6 +177,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         try {
             val connectedRawSocket = Socket()
             rawSocket = connectedRawSocket
+            onSocket(connectedRawSocket)
             connectedRawSocket.connect(java.net.InetSocketAddress("127.0.0.1", proxyPort), timeout)
             connectedRawSocket.soTimeout = timeout
             connectedRawSocket.tcpNoDelay = true
@@ -213,6 +232,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 connectedRawSocket
             }
             activeSocket = tunnelSocket
+            onSocket(tunnelSocket)
             tunnelSocket.soTimeout = timeout
             if (tunnelSocket is SSLSocket) {
                 // SSLSocket does not enable HTTPS hostname verification by
