@@ -258,6 +258,16 @@ class E2eHistoryDaoTest {
             )
         )
 
+        // Editing a profile after a pass must not rewrite the config that was tested.
+        val editedProfile = profile.copy(
+            serverHost = "new-server.example.test",
+            dnsttServerPublicKey = "b".repeat(64)
+        )
+        val resolverDao = database.resolverDao()
+        resolverDao.saveTunnelProfile(
+            TunnelProfileMapper.toEntity(editedProfile, resolverDao.findTunnelProfile(profile.id))
+        )
+
         val rows = dao.getSlipNetE2eExportBatch(limit = 100, offset = 0)
 
         assertEquals(1, rows.size)
@@ -265,6 +275,8 @@ class E2eHistoryDaoTest {
         assertEquals(100L, rows.single().testedAt)
         assertEquals("DNSTT", rows.single().tunnelProtocol)
         assertEquals(204, rows.single().httpStatusCode)
+        assertEquals("tunnel.example.test", rows.single().serverHost)
+        assertEquals("a".repeat(64), rows.single().dnsttServerPublicKey)
         val formatted = SlipNetE2eExportFormatter.format(rows)
         assertEquals("10.20.30.50\n", formatted.resolverListText)
     }
