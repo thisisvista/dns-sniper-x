@@ -136,7 +136,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
     private fun reserveLoopbackPort(): Int =
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
 
-    private fun verifyHttpThroughSocks5(
+    internal fun verifyHttpThroughSocks5(
         proxyPort: Int,
         verificationUrl: String,
         timeoutMs: Long
