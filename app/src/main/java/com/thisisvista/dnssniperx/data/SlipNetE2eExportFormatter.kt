@@ -20,7 +20,7 @@ object SlipNetE2eExportFormatter {
             row.resolverPort == 53 &&
                 row.verificationMode == "FULL" &&
                 row.status == "FULL_PASS" &&
-                row.httpStatusCode in 200..399 &&
+                row.httpStatusCode?.let { it in 200..399 } == true &&
                 row.tunnelProtocol in setOf("DNSTT", "VAYDNS") &&
                 SlipNetExportFormatter.isIpv4Literal(row.resolverAddress)
         }.distinctBy { "${it.resolverAddress}:${it.resolverPort}:${it.tunnelProtocol}:${it.profileId}" }
