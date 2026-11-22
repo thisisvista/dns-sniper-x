@@ -34,6 +34,7 @@ class MainActivityEndToEndTest {
     @Test
     fun manualImportDeduplicatesAndSurvivesActivityRecreation() {
         val address = "198.51.100.77"
+        val endpoint = "$address:53"
 
         composeRule.onNodeWithText("DNS addresses")
             .performScrollTo()
@@ -47,10 +48,10 @@ class MainActivityEndToEndTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText(address).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
         // The saved-resolver list is below the import controls; scroll it into view.
-        composeRule.onNodeWithText(address).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
 
         // Importing the same endpoint again must not create a second library row.
         composeRule.onNodeWithText("DNS addresses")
@@ -74,8 +75,8 @@ class MainActivityEndToEndTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText(address).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
     }
 }
