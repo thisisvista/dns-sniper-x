@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -178,6 +179,36 @@ class E2eHistoryDaoTest {
         assertEquals(true, cancellationPropagated)
         val saved = dao.getResolverAttempts("10.20.30.42", 53).single()
         assertEquals("CANCELLED", saved.status)
+        assertEquals("CELLULAR:mci", saved.networkKey)
+    }
+
+    @Test
+    fun coordinatorEnforcesTotalTimeoutAndPersistsItSeparatelyFromCancellation() = runBlocking {
+        val waitingEngine = object : SlipNetE2eEngine {
+            override suspend fun verify(
+                request: SlipNetE2eRequest,
+                onPhase: (String) -> Unit
+            ): SlipNetE2eResult {
+                awaitCancellation()
+            }
+        }
+        val coordinator = E2eVerificationCoordinator(
+            historyDao = dao,
+            engines = mapOf(TunnelProtocol.DNSTT to waitingEngine)
+        )
+
+        val result = coordinator.verify(
+            resolverAddress = "10.20.30.43",
+            resolverPort = 53,
+            profile = testProfile(),
+            mode = E2eVerificationMode.FULL,
+            network = testCellularNetwork(),
+            timeoutMs = 1_000
+        )
+
+        assertEquals(E2eStatus.TIMEOUT, result.status)
+        val saved = dao.getResolverAttempts("10.20.30.43", 53).single()
+        assertEquals("TIMEOUT", saved.status)
         assertEquals("CELLULAR:mci", saved.networkKey)
     }
 
