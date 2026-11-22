@@ -46,7 +46,11 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText(address).fetchSemanticsNodes().isNotEmpty()
+        }
+        // The saved-resolver list is below the import controls; scroll it into view.
+        composeRule.onNodeWithText(address).performScrollTo().assertIsDisplayed()
 
         // Importing the same endpoint again must not create a second library row.
         composeRule.onNodeWithText("DNS addresses")
@@ -69,6 +73,9 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(address).assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText(address).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(address).performScrollTo().assertIsDisplayed()
     }
 }
