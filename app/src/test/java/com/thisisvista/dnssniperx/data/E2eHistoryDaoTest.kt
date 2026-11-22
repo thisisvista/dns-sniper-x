@@ -220,7 +220,9 @@ class E2eHistoryDaoTest {
             E2eHistoryEntity(
                 resolverAddress = "10.20.30.50", resolverPort = 53, testedAt = 100,
                 networkKey = "CELLULAR:mci", networkTransport = "CELLULAR",
-                profileId = profile.id, tunnelProtocol = "DNSTT",
+                profileId = profile.id, profileName = profile.name,
+                serverHost = profile.serverHost, serverPort = profile.serverPort,
+                dnsttServerPublicKey = profile.dnsttServerPublicKey, tunnelProtocol = "DNSTT",
                 verificationMode = "FULL", status = "FULL_PASS",
                 phase = "COMPLETED", elapsedMs = 900, httpStatusCode = 204
             )
