@@ -2,7 +2,6 @@ package com.thisisvista.dnssniperx
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -33,6 +32,7 @@ import com.thisisvista.dnssniperx.data.SlipNetE2eEngine
 import com.thisisvista.dnssniperx.data.TunnelProfile
 import com.thisisvista.dnssniperx.data.TunnelProfileMapper
 import com.thisisvista.dnssniperx.data.TunnelProtocol
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 @Composable
@@ -43,8 +43,7 @@ internal fun E2eVerificationSection(
     enabled: Boolean
 ) {
     var resolverIp by rememberSaveable { mutableStateOf("") }
-    var serverHost by rememberSaveable { mutableStateOf("") }
-    var serverPort by rememberSaveable { mutableStateOf("5300") }
+    var tunnelDomain by rememberSaveable { mutableStateOf("") }
     var publicKey by rememberSaveable { mutableStateOf("") }
     var running by rememberSaveable { mutableStateOf(false) }
     var status by rememberSaveable { mutableStateOf("Not tested") }
@@ -53,9 +52,10 @@ internal fun E2eVerificationSection(
     val scope = rememberCoroutineScope()
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
     val attemptsFlow = remember(resolverIp) {
-        if (resolverIp.isBlank()) null else historyDao.observeResolverAttempts(resolverIp.trim(), 53, 10)
+        if (resolverIp.isBlank()) flowOf(emptyList())
+        else historyDao.observeResolverAttempts(resolverIp.trim(), 53, 10)
     }
-    val attempts = attemptsFlow?.collectAsState(initial = emptyList())?.value.orEmpty()
+    val attempts by attemptsFlow.collectAsState(initial = emptyList())
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -74,35 +74,26 @@ internal fun E2eVerificationSection(
             OutlinedTextField(
                 value = resolverIp,
                 onValueChange = { resolverIp = it },
-                label = { Text("Resolver IP") },
+                label = { Text("Resolver IP (UDP port 53)") },
                 placeholder = { Text("e.g. 1.2.3.4") },
                 singleLine = true,
                 enabled = !running,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
-                value = serverHost,
-                onValueChange = { serverHost = it },
-                label = { Text("DNSTT server hostname or IP") },
+                value = tunnelDomain,
+                onValueChange = { tunnelDomain = it },
+                label = { Text("DNSTT tunnel domain") },
+                placeholder = { Text("The domain configured on your DNSTT server") },
                 singleLine = true,
                 enabled = !running,
                 modifier = Modifier.fillMaxWidth()
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = serverPort,
-                    onValueChange = { serverPort = it.filter(Char::isDigit).take(5) },
-                    label = { Text("Server port") },
-                    singleLine = true,
-                    enabled = !running,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "Resolver port: 53",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f).padding(top = 18.dp)
-                )
-            }
+            Text(
+                "The client sends DNS over UDP/53 to the resolver above. The tunnel domain and server-side SOCKS5 upstream must match your DNSTT server configuration; there is no separate client-side DNSTT server port in this binding.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             OutlinedTextField(
                 value = publicKey,
                 onValueChange = { publicKey = it.filter { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }.take(64) },
@@ -124,13 +115,14 @@ internal fun E2eVerificationSection(
                         detail = "Preparing DNSTT E2E verification…"
                         elapsed = null
                         try {
-                            val port = serverPort.toIntOrNull() ?: error("Enter a valid DNSTT server port.")
                             val profile = TunnelProfile(
                                 id = "dnstt-e2e-manual",
                                 name = "DNSTT E2E test profile",
                                 protocol = TunnelProtocol.DNSTT,
-                                serverHost = serverHost.trim(),
-                                serverPort = port,
+                                serverHost = tunnelDomain.trim(),
+                                // The generic profile requires a port; DNSTT's resolver port is stored here.
+                                // The mobile binding itself uses the resolver endpoint passed to verify().
+                                serverPort = 53,
                                 dnsttServerPublicKey = publicKey.trim()
                             )
                             val errors = profile.validate()
@@ -165,7 +157,7 @@ internal fun E2eVerificationSection(
                         }
                     }
                 },
-                enabled = enabled && !running && !resolverIp.isBlank() && !serverHost.isBlank() && publicKey.length == 64,
+                enabled = enabled && !running && resolverIp.isNotBlank() && tunnelDomain.isNotBlank() && publicKey.length == 64,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (running) {
