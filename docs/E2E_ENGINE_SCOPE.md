@@ -68,3 +68,14 @@ Export records must identify at least:
 - network context on which it passed.
 
 Do not export a generic "working DNS" label without identifying which engine was actually tested.
+
+## Implemented export behavior
+
+The E2E section provides two separate files:
+
+- `dns-sniperx-slipnet-e2e.txt`: one IPv4 address per line, suitable for SlipNet's DNS-list import. It contains only resolver endpoints with a recorded `FULL_PASS`, `FULL` verification, and successful HTTP status (200–399). It does not include UDP/TCP-only candidates or handshake-only attempts.
+- `dns-sniperx-slipnet-e2e-report.json`: a versioned evidence report containing the resolver endpoint, engine/profile identity, non-secret engine configuration (including the DNSTT public key), last successful test time, elapsed time, HTTP status, and network context.
+
+The report is an evidence/configuration reference, not a claim that SlipNet can import the JSON directly. SlipNet's DNS scanner accepts the plain IP list. The JSON file preserves why each address qualified and which engine/profile was actually tested. Private keys and credentials are never exported.
+
+The export query keeps the latest successful FULL attempt per resolver/profile. A later failed retry does not erase the last successful proof, but the report timestamp remains the time of that success. DNSTT and VayDNS remain separate records.
