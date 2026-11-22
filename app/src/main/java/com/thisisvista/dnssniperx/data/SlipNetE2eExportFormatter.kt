@@ -23,7 +23,9 @@ object SlipNetE2eExportFormatter {
                 row.httpStatusCode?.let { it in 200..399 } == true &&
                 row.tunnelProtocol in setOf("DNSTT", "VAYDNS") &&
                 SlipNetExportFormatter.isIpv4Literal(row.resolverAddress)
-        }.distinctBy { "${it.resolverAddress}:${it.resolverPort}:${it.tunnelProtocol}:${it.profileId}" }
+        }.groupBy { "${it.resolverAddress}:${it.resolverPort}:${it.tunnelProtocol}:${it.profileId}" }
+            .values
+            .mapNotNull { attempts -> attempts.maxWithOrNull(compareBy<SlipNetE2eExportRow> { it.testedAt }.thenBy { it.profileId }) }
             .sortedWith(compareBy<SlipNetE2eExportRow> { it.resolverAddress }.thenBy { it.tunnelProtocol })
 
         val resolverList = eligible.map { it.resolverAddress }.distinct()
