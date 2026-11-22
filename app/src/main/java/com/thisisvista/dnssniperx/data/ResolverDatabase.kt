@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class, ProviderEntity::class, ResolverSourceEntity::class, ResolverEvidenceEntity::class, ProviderDiscoveryStateEntity::class], version = 12, exportSchema = false)
+@Database(entities = [ResolverEntity::class, ScanHistoryEntity::class, DohHistoryEntity::class, DotHistoryEntity::class, SourceCollectionHistoryEntity::class, TunnelProfileEntity::class, AppLogEntity::class, ProviderEntity::class, ResolverSourceEntity::class, ResolverEvidenceEntity::class, ProviderDiscoveryStateEntity::class, E2eHistoryEntity::class], version = 13, exportSchema = false)
 abstract class ResolverDatabase : RoomDatabase() {
     abstract fun resolverDao(): ResolverDao
     abstract fun e2eHistoryDao(): E2eHistoryDao
