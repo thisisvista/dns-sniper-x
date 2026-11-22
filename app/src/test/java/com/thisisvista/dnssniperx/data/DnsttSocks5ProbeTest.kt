@@ -63,7 +63,7 @@ class DnsttSocks5ProbeTest {
                         // Consume request headers.
                     }
                     output.write(
-                        "HTTP/1.1 204 No Content\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"
+                        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                             .toByteArray(StandardCharsets.ISO_8859_1)
                     )
                     output.flush()
