@@ -80,3 +80,35 @@ These line counts are not counts of individual IP addresses. CIDR overlap, sourc
 - Build the smallest DNSTT-only AAR for the app's supported ABIs; add checksum and license notices.
 - Implement a Kotlin adapter behind `SlipNetE2eEngine` and test it against a controlled DNSTT server.
 - Only after DNSTT tests pass, begin Slipstream native packaging and Android VPN/TUN integration.
+
+
+## Exact upstream source match confirmed
+
+The APK's embedded version-control metadata records source revision:
+
+`caccd9e22fa084264db0bda70c8d694d0f177937`
+
+GitHub's `v2.5.6` release tag resolves to that exact commit. This provides a matching source tree for the uploaded APK, rather than relying on the previously audited, older source revision.
+
+At the matching commit, the following source files were inspected:
+
+- `app/src/main/java/app/slipnet/tunnel/DnsttBridge.kt`
+- `app/src/main/java/app/slipnet/tunnel/SlipstreamBridge.kt`
+- `app/src/main/java/app/slipnet/tunnel/HevSocks5Tunnel.kt`
+- `app/src/main/java/app/slipnet/service/SlipNetVpnService.kt`
+- `.gitmodules`
+- `gomobile-build/Makefile`
+
+The DNSTT bridge confirms that SlipNet creates the Go binding through `Mobile.newClient(dnsAddr, tunnelDomain, publicKey, listenAddr)`, configures protocol options, starts the client, and checks its running state. The local SOCKS listener check is only a local readiness check; it is not proof of a remote tunnel handshake or application traffic.
+
+The Slipstream bridge confirms a separate JNI client with native start/stop/running/QUIC-ready methods. The HEV component is a separate TUN-to-SOCKS layer. The VPN service coordinates these components; copying only the Go or Rust library would not reproduce a working full-device tunnel.
+
+The matching `.gitmodules` declares separate repositories for DNSTT, DNSTT mobile bindings, NoizDNS, VayDNS and Rust Slipstream components. The gomobile Makefile builds its Lite AAR from NoizDNS, VayDNS and Soar packages; it is not a minimal DNSTT-only artifact. Therefore, do not treat the prebuilt APK's `libgojni.so` as a drop-in dependency for SniperX.
+
+### Updated integration direction
+
+- Use the exact `v2.5.6` source revision as the compatibility reference.
+- Resolve and pin every required submodule gitlink and its independent license before building.
+- Build a minimal DNSTT binding for SniperX rather than importing SlipNet's broad Go AAR.
+- Port only the required lifecycle and protocol configuration into a SniperX-owned adapter; do not copy the entire SlipNet VPN service or app architecture.
+- Keep Slipstream and HEV/TUN as separately gated integrations after DNSTT is reproducibly built and verified.
