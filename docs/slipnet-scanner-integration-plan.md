@@ -65,3 +65,44 @@ Keep existing SniperX source collection, Iran/ISP prefix discovery, provider evi
 - Engine tests with controlled test servers for DNS transport and tunnel startup/failure handling.
 - Physical-device tests on multiple real networks/ISPs before claiming operator coverage or real-world E2E success.
 - CI green before user-facing UI changes.
+
+
+## Pinned upstream build audit (2026-11-22)
+
+The source-level dependency audit was performed against SlipNet commit
+`2ed00fd0072ad0b558e30ec6b5e8b30948f98894`. Pin this revision in any future
+vendor/import work; do not silently track upstream `main`.
+
+Confirmed Android/native build requirements in that revision:
+
+- The upstream Android app applies the Mozilla Rust Android Gradle plugin and
+  builds a Rust `slipstream` shared library from
+  `app/src/main/rust/slipstream-rust`.
+- Its Rust build targets Android ARM, ARM64, and x86_64 and uses the Android
+  NDK (upstream pins NDK 29.0.14206865), Rust stable, a custom linker wrapper,
+  and a Picoquic native build.
+- The Slipstream build expects Android OpenSSL 3.0.15 static libraries and
+  headers for supported ABIs. This is a material native build dependency, not
+  satisfied by adding a Kotlin source file.
+- DNSTT/NoizDNS/VayDNS bindings are produced separately with gomobile from
+  `gomobile-build`; its module declares Go 1.27.3 and builds AARs for Android
+  ARM, ARM64, and AMD64. The Makefile also includes multiple local Go modules
+  (DNSTT, NoizDNS, VayDNS and related mobile wrappers).
+- Upstream's application module also brings its own native TUN/SOCKS components
+  and service integration. SniperX must not import these wholesale just to run
+  a resolver check.
+
+### Integration decision
+
+Do not add the upstream Rust plugin, Go toolchain, OpenSSL downloads, native
+TUN stack, or large AARs to SniperX's app module until the engine boundary and
+minimal required protocol set are agreed and reproducibly buildable in CI.
+First isolate the DNSTT E2E path and its Go mobile artifact as a separately
+versioned adapter; keep Slipstream disabled as E2E_NOT_CONFIGURED until its
+Rust/Picoquic/OpenSSL build can be added and tested independently. This staged
+approach avoids increasing APK size or breaking the current app before a real
+engine can be validated.
+
+No native engine was added by this audit. The existing
+`SlipNetE2eEngine` remains an integration contract only, and the application
+must continue to report E2E_NOT_CONFIGURED until a real adapter is installed.
