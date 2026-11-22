@@ -13,7 +13,7 @@ class TunnelProfileMapperTest {
             protocol = TunnelProtocol.DNSTT,
             serverHost = " tunnel.example ",
             serverPort = 5300,
-            dnsttServerPublicKey = "  public-noise-key  "
+            dnsttServerPublicKey = "  0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  "
         )
 
         val entity = TunnelProfileMapper.toEntity(profile, now = 100L)
@@ -21,12 +21,12 @@ class TunnelProfileMapperTest {
 
         assertEquals("Home DNSTT", entity.name)
         assertEquals("tunnel.example", entity.serverHost)
-        assertEquals("public-noise-key", entity.dnsttServerPublicKey)
+        assertEquals("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", entity.dnsttServerPublicKey)
         assertEquals("DNSTT", entity.protocol)
         assertEquals(100L, entity.createdAt)
         assertEquals(100L, entity.updatedAt)
         assertEquals(profile.id, restored?.id)
-        assertEquals("public-noise-key", restored?.dnsttServerPublicKey)
+        assertEquals("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", restored?.dnsttServerPublicKey)
     }
 
     @Test fun normalizesSlipstreamTlsServerNameBeforeValidationAndPersistence() {
@@ -76,7 +76,7 @@ class TunnelProfileMapperTest {
             protocol = TunnelProtocol.DNSTT,
             serverHost = "edge.example",
             serverPort = 5300,
-            dnsttServerPublicKey = "public-key"
+            dnsttServerPublicKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         )
         val invalid = valid.copy(serverPort = 0)
         try {
@@ -98,7 +98,7 @@ class TunnelProfileMapperTest {
             protocol = TunnelProtocol.DNSTT,
             serverHost = "edge.example",
             serverPort = 5300,
-            dnsttServerPublicKey = "public-key"
+            dnsttServerPublicKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         )
         val entity = TunnelProfileMapper.toEntity(valid)
         assertNull(TunnelProfileMapper.toModel(entity.copy(protocol = "FUTURE_PROTOCOL")))
