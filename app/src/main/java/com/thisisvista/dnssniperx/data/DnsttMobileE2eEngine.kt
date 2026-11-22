@@ -1,5 +1,6 @@
 package com.thisisvista.dnssniperx.data
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import mobile.Mobile
@@ -99,6 +100,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                     httpStatusCode = statusCode
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val status = if (request.mode == E2eVerificationMode.FULL) E2eStatus.FULL_FAIL else E2eStatus.HANDSHAKE_FAIL
             result = SlipNetE2eResult(
