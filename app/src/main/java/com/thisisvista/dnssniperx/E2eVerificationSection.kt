@@ -9,6 +9,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +33,9 @@ import com.thisisvista.dnssniperx.data.SlipNetE2eEngine
 import com.thisisvista.dnssniperx.data.TunnelProfile
 import com.thisisvista.dnssniperx.data.TunnelProfileMapper
 import com.thisisvista.dnssniperx.data.TunnelProtocol
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -49,6 +53,7 @@ internal fun E2eVerificationSection(
     var status by rememberSaveable { mutableStateOf("Not tested") }
     var detail by rememberSaveable { mutableStateOf("") }
     var elapsed by rememberSaveable { mutableStateOf<Long?>(null) }
+    var testJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
     val attemptsFlow = remember(resolverIp) {
@@ -109,7 +114,7 @@ internal fun E2eVerificationSection(
             )
             Button(
                 onClick = {
-                    scope.launch {
+                    val job = scope.launch(start = CoroutineStart.LAZY) {
                         running = true
                         status = "Running"
                         detail = "Preparing DNSTT E2E verification…"
@@ -120,8 +125,8 @@ internal fun E2eVerificationSection(
                                 name = "DNSTT E2E test profile",
                                 protocol = TunnelProtocol.DNSTT,
                                 serverHost = tunnelDomain.trim(),
-                                // The generic profile requires a port; DNSTT's resolver port is stored here.
-                                // The mobile binding itself uses the resolver endpoint passed to verify().
+                                // DNSTT's client binding has no separate server-port setting.
+                                // The resolver endpoint is supplied independently to verify().
                                 serverPort = 53,
                                 dnsttServerPublicKey = publicKey.trim()
                             )
@@ -144,20 +149,28 @@ internal fun E2eVerificationSection(
                                 timeoutMs = 25_000,
                                 verificationUrl = "http://www.gstatic.com/generate_204",
                                 expectedHttpStatusCode = 204,
-                                onPhase = { phase -> detail = phase }
+                                onPhase = { phase -> scope.launch { detail = phase } }
                             )
                             status = result.status.name
                             detail = result.errorMessage ?: "HTTP ${result.httpStatusCode ?: "-"} received through the tunnel."
                             elapsed = result.elapsedMs
+                        } catch (cancelled: CancellationException) {
+                            status = "CANCELLED"
+                            detail = "The test was cancelled. The attempt is saved in history."
+                            throw cancelled
                         } catch (failure: Exception) {
                             status = "NOT_TESTED"
                             detail = failure.message ?: failure.javaClass.simpleName
                         } finally {
                             running = false
+                            testJob = null
                         }
                     }
+                    testJob = job
+                    job.start()
                 },
-                enabled = enabled && !running && resolverIp.isNotBlank() && tunnelDomain.isNotBlank() && publicKey.length == 64,
+                enabled = enabled && !running && testJob == null &&
+                    resolverIp.isNotBlank() && tunnelDomain.isNotBlank() && publicKey.length == 64,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (running) {
@@ -165,6 +178,14 @@ internal fun E2eVerificationSection(
                     Text("  Testing DNSTT tunnel…")
                 } else {
                     Text("Save profile and run real E2E test")
+                }
+            }
+            if (running) {
+                OutlinedButton(
+                    onClick = { testJob?.cancel(CancellationException("Cancelled by user")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel test")
                 }
             }
             Text("Network: ${network.transport.name} · ${network.providerName ?: network.operatorName ?: "provider unknown"}", style = MaterialTheme.typography.labelSmall)
