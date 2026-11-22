@@ -193,22 +193,22 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             }
             skipFully(input, 2) // bound port
 
-            activeSocket = if (tls) {
+            val tunnelSocket: Socket = if (tls) {
                 (SSLSocketFactory.getDefault() as SSLSocketFactory)
                     .createSocket(connectedRawSocket, host, port, true) as SSLSocket
             } else {
                 connectedRawSocket
             }
-            activeSocket = activeSocket
-            activeSocket.soTimeout = timeout
-            if (activeSocket is SSLSocket) activeSocket.startHandshake()
+            activeSocket = tunnelSocket
+            tunnelSocket.soTimeout = timeout
+            if (tunnelSocket is SSLSocket) tunnelSocket.startHandshake()
 
             val path = buildString {
                 append(uri.rawPath?.takeIf { it.isNotEmpty() } ?: "/")
                 if (!uri.rawQuery.isNullOrEmpty()) append("?").append(uri.rawQuery)
             }
             val hostHeader = if ((tls && port != 443) || (!tls && port != 80)) "$host:$port" else host
-            val writer = OutputStreamWriter(activeSocket.getOutputStream(), StandardCharsets.ISO_8859_1)
+            val writer = OutputStreamWriter(tunnelSocket.getOutputStream(), StandardCharsets.ISO_8859_1)
             writer.write("GET $path HTTP/1.1\r\n")
             writer.write("Host: $hostHeader\r\n")
             writer.write("User-Agent: DNS-SniperX-E2E/1\r\n")
@@ -216,7 +216,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             writer.write("Connection: close\r\n\r\n")
             writer.flush()
 
-            val reader = BufferedReader(InputStreamReader(activeSocket.getInputStream(), StandardCharsets.ISO_8859_1))
+            val reader = BufferedReader(InputStreamReader(tunnelSocket.getInputStream(), StandardCharsets.ISO_8859_1))
             val statusLine = reader.readLine() ?: error("No HTTP response received through DNSTT")
             val match = Regex("^HTTP/1\\.[01] ([0-9]{3})(?:\\s|$)").find(statusLine)
                 ?: error("Invalid HTTP status line: $statusLine")
