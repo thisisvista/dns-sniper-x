@@ -56,7 +56,7 @@ class MainActivityEndToEndTest {
         // a useful failure if parsing/insertion fails instead of timing out on a
         // downstream dashboard counter.
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("Saved 1 new DNS entries successfully.")
+            composeRule.onAllNodesWithText("Saved 1 DNS entries successfully.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
