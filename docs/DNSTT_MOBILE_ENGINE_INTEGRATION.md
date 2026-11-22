@@ -49,7 +49,7 @@ The source repository's top-level project and `go_src/COPYING` both declare CC0 
 
 ## Expected end-to-end verification path
 
-The mobile binding's local TCP listener is a raw stream forwarder, not itself a SOCKS5 server. The upstream Android app implements SOCKS5 negotiation over that local TCP connection; its DNSTT server-side `UPSTREAMADDR` must point at a SOCKS5-capable endpoint. A correct SniperX full verification should therefore:
+The mobile binding's local TCP listener is a raw stream forwarder, not itself a SOCKS5 server. SniperX must act as the SOCKS5 client over that local TCP stream, and the DNSTT server's `UPSTREAMADDR` must point at a SOCKS5-capable server. A correct SniperX full verification should therefore:
 
 1. Start the Go DNSTT client against the candidate resolver IP and configured tunnel domain/key.
 2. Connect to the local TCP listener.
@@ -74,4 +74,4 @@ Important API gaps found:
 3. The exported listener is a raw TCP forwarder, not a SOCKS5 proxy (despite an outdated source comment). Each TCP connection becomes a tunnel stream forwarded to the server's single configured upstream endpoint.
 4. The generated API does not expose `DialTunnel` because its return type is Go `net.Conn`.
 
-These findings mean the AAR is a successful build artifact, **not yet an integration-ready SniperX engine**. The build script now applies a guarded source transformation before binding: it replaces the unsupported function callback with a gomobile-compatible `SocketProtector` interface and removes the unused TUN-FD setter/field. The build fails unless the generated Java API exposes both `setSocketProtector` and the callback's `protect(long)` method. This patch is still awaiting CI verification. Even after it builds, the Android adapter must call `VpnService.protect(fd)` and be tested on-device before use inside a VPN path. The raw TCP forwarding contract and controlled-server traffic tests remain to be implemented.
+These findings mean the AAR is a successful build artifact, **not yet an integration-ready SniperX engine**. The build script now applies a guarded source transformation before binding: it replaces the function callback with a gomobile-compatible `SocketProtector` interface and removes the unused TUN-FD setter/field. CI must verify that the generated Java API exposes `setSocketProtector` and the callback's `protect(long)` method. Even after it builds, the Kotlin adapter must wire this callback to `VpnService.protect(fd)` when running alongside an Android VPN service, and that path needs on-device testing. A local fake-SOCKS5 HTTP probe test has been added; a real controlled DNSTT server test remains outstanding.
