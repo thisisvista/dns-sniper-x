@@ -47,7 +47,7 @@ object SlipNetE2eExportFormatter {
                 append("        \"id\": ").append(json(row.profileId)).append(",\n")
                 append("        \"name\": ").append(json(row.profileName)).append(",\n")
                 append("        \"serverHost\": ").append(json(row.serverHost)).append(",\n")
-                append("        \"serverPort\": ").append(row.serverPort).append(",\n")
+                append("        \"serverPort\": ").append(if (row.tunnelProtocol == "DNSTT") "null" else row.serverPort.toString()).append(",\n")
                 append("        \"dnsttServerPublicKey\": ").append(nullableJson(row.dnsttServerPublicKey)).append(",\n")
                 append("        \"slipstreamTlsServerName\": ").append(nullableJson(row.slipstreamTlsServerName)).append("\n")
                 append("      },\n")
