@@ -84,7 +84,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 onPhase("Verifying SOCKS5 forwarding and HTTP traffic")
                 phase = E2ePhase.APPLICATION_REQUEST
                 val statusCode = verifyHttpThroughSocks5(
-                    proxyPort = localPort,
+                    proxyPort = localPort.toInt(),
                     verificationUrl = request.verificationUrl,
                     timeoutMs = request.timeoutMs
                 )
