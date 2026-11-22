@@ -41,4 +41,55 @@ interface E2eHistoryDao {
 
     @Query("SELECT COUNT(*) FROM e2e_history WHERE status = :status")
     fun observeStatusCount(status: String): Flow<Int>
+
+    /**
+     * SlipNet import candidates: latest successful FULL E2E proof per resolver,
+     * engine profile and endpoint. Failed later retests do not erase last success.
+     * Only actual application-level HTTP verification qualifies.
+     */
+    @Query("""
+        SELECT
+            e.resolverAddress AS resolverAddress,
+            e.resolverPort AS resolverPort,
+            e.testedAt AS testedAt,
+            e.networkKey AS networkKey,
+            e.networkTransport AS networkTransport,
+            e.networkLabel AS networkLabel,
+            e.operatorName AS operatorName,
+            e.providerId AS providerId,
+            p.id AS profileId,
+            p.name AS profileName,
+            e.tunnelProtocol AS tunnelProtocol,
+            p.serverHost AS serverHost,
+            p.serverPort AS serverPort,
+            p.dnsttServerPublicKey AS dnsttServerPublicKey,
+            p.slipstreamTlsServerName AS slipstreamTlsServerName,
+            e.verificationMode AS verificationMode,
+            e.status AS status,
+            e.elapsedMs AS elapsedMs,
+            e.httpStatusCode AS httpStatusCode
+        FROM e2e_history AS e
+        INNER JOIN tunnel_profiles AS p ON p.id = e.profileId
+        WHERE e.resolverPort = 53
+          AND e.verificationMode = 'FULL'
+          AND e.status = 'FULL_PASS'
+          AND e.httpStatusCode BETWEEN 200 AND 399
+          AND e.tunnelProtocol IN ('DNSTT', 'VAYDNS')
+          AND NOT EXISTS (
+              SELECT 1 FROM e2e_history AS newer
+              WHERE newer.resolverAddress = e.resolverAddress
+                AND newer.resolverPort = e.resolverPort
+                AND newer.profileId = e.profileId
+                AND newer.verificationMode = 'FULL'
+                AND newer.status = 'FULL_PASS'
+                AND newer.httpStatusCode BETWEEN 200 AND 399
+                AND (
+                    newer.testedAt > e.testedAt
+                    OR (newer.testedAt = e.testedAt AND newer.id > e.id)
+                )
+          )
+        ORDER BY e.testedAt DESC, e.resolverAddress ASC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getSlipNetE2eExportBatch(limit: Int, offset: Int): List<SlipNetE2eExportRow>
 }
