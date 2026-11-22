@@ -1,14 +1,21 @@
 package com.thisisvista.dnssniperx.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.BufferedReader
 import java.io.DataInputStream
+import java.io.IOException
 import java.io.InputStreamReader
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
@@ -56,7 +63,7 @@ class DnsttSocks5ProbeTest {
                         // Consume request headers.
                     }
                     output.write(
-                        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        "HTTP/1.1 204 No Content\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"
                             .toByteArray(StandardCharsets.ISO_8859_1)
                     )
                     output.flush()
@@ -80,6 +87,55 @@ class DnsttSocks5ProbeTest {
         } finally {
             server.close()
             worker.join(5_000)
+        }
+    }
+
+    @Test
+    fun closingActiveSocketInterruptsBlockedSocks5GreetingRead() {
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        server.soTimeout = 3_000
+        val publishedSocket = AtomicReference<Socket?>(null)
+        val socketPublished = CountDownLatch(1)
+        val probeFailure = AtomicReference<Throwable?>(null)
+        val worker = thread(isDaemon = true) {
+            try {
+                DnsttMobileE2eEngine().verifyHttpThroughSocks5(
+                    proxyPort = server.localPort,
+                    verificationUrl = "http://example.test/probe",
+                    timeoutMs = 30_000,
+                    onSocket = {
+                        publishedSocket.set(it)
+                        socketPublished.countDown()
+                    }
+                )
+            } catch (error: Throwable) {
+                probeFailure.set(error)
+            }
+        }
+        var acceptedSocket: Socket? = null
+
+        try {
+            assertTrue("Probe did not publish its socket", socketPublished.await(2, TimeUnit.SECONDS))
+            acceptedSocket = server.accept()
+            acceptedSocket.soTimeout = 2_000
+
+            // Wait until the probe sends its greeting; the server deliberately never replies.
+            val greeting = ByteArray(3)
+            DataInputStream(acceptedSocket.getInputStream()).readFully(greeting)
+            assertEquals(listOf(5, 1, 0), greeting.map { it.toInt() and 0xff })
+
+            publishedSocket.get()?.close()
+
+            worker.join(1_500)
+            assertFalse("Probe remained blocked after its socket was closed", worker.isAlive)
+            val failure = probeFailure.get()
+            assertNotNull("Closing the socket should fail the blocked probe", failure)
+            assertTrue("Expected an I/O exception, got $failure", failure is IOException)
+        } finally {
+            publishedSocket.get()?.close()
+            acceptedSocket?.close()
+            server.close()
+            worker.join(2_000)
         }
     }
 }
