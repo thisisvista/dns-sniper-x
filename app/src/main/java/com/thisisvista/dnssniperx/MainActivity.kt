@@ -231,6 +231,9 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                     AppLogger.record(dao, context, "ERROR", "import", "TXT import failed", exception, stage = "read-and-parse")
                     message = "TXT import failed: ${exception.message ?: "Could not read file"}. Entries saved from completed batches remain in your library."
                 } finally {
+                    // Refresh the saved-resolver page even after a partial/cancelled
+                    // import so every committed batch is visible immediately.
+                    resolverRefreshToken++
                     isImporting = false
                     importProgress = ""
                 }
@@ -562,17 +565,32 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             },
             onClearLogs = { scope.launch { dao.clearAppLogs(); message = "Diagnostic logs cleared." } },
             onImport = {
-                val parsed = ResolverListParser.parse(importText)
-                scope.launch {
-                    val inserted = if (parsed.isEmpty()) 0 else dao.insertOrMergeSources(parsed)
-                    val skipped = parsed.size - inserted
-                    message = when {
-                        parsed.isEmpty() -> "No valid DNS entries found. Check the format."
-                        inserted == 0 -> "No new entries. These DNS addresses are already saved."
-                        skipped > 0 -> "Saved $inserted new DNS entries; skipped $skipped duplicates."
-                        else -> "Saved $inserted DNS entries successfully."
+                if (!isImporting && !isCollecting && !isScanning) {
+                    isImporting = true
+                    scope.launch {
+                        try {
+                            val parsed = ResolverListParser.parse(importText)
+                            val inserted = if (parsed.isEmpty()) 0 else dao.insertOrMergeSources(parsed)
+                            val skipped = parsed.size - inserted
+                            message = when {
+                                parsed.isEmpty() -> "No valid DNS entries found. Check the format."
+                                inserted == 0 -> "No new entries. These DNS addresses are already saved."
+                                skipped > 0 -> "Saved $inserted new DNS entries; skipped $skipped duplicates."
+                                else -> "Saved $inserted DNS entries successfully."
+                            }
+                            if (inserted > 0) {
+                                importText = ""
+                                // Room count updates independently; explicitly refresh the
+                                // paged resolver query so the new row appears in the library.
+                                resolverRefreshToken++
+                            }
+                        } catch (exception: Exception) {
+                            AppLogger.record(dao, context, "ERROR", "import", "Manual DNS import failed", exception, stage = "parse-and-save")
+                            message = "DNS import failed: ${exception.message ?: "Unknown error"}"
+                        } finally {
+                            isImporting = false
+                        }
                     }
-                    if (inserted > 0) importText = ""
                 }
             },
             onDelete = { id -> scope.launch { dao.deleteById(id) } }
