@@ -90,7 +90,7 @@ interface E2eHistoryDao {
                     OR (newer.testedAt = e.testedAt AND newer.id > e.id)
                 )
           )
-        ORDER BY e.testedAt DESC, e.resolverAddress ASC
+        ORDER BY e.testedAt DESC, e.resolverAddress ASC, e.id ASC
         LIMIT :limit OFFSET :offset
     """)
     suspend fun getSlipNetE2eExportBatch(limit: Int, offset: Int): List<SlipNetE2eExportRow>
