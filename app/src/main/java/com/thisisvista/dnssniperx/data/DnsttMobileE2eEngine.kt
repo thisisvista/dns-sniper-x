@@ -26,12 +26,18 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
 
     override suspend fun verify(
         request: SlipNetE2eRequest,
-        onPhase: (String) -> Unit
+        onPhase: (String) -> Unit,
+        onPhaseChanged: (E2ePhase) -> Unit
     ): SlipNetE2eResult = withContext(Dispatchers.IO) {
         val startedAt = System.nanoTime()
         var phase = E2ePhase.NOT_STARTED
         var client: mobile.DnsttClient? = null
         var result: SlipNetE2eResult
+        fun reportPhase(next: E2ePhase, label: String) {
+            phase = next
+            onPhaseChanged(next)
+            onPhase(label)
+        }
 
         val errors = request.validate()
         if (errors.isNotEmpty()) {
@@ -47,8 +53,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         }
 
         try {
-            onPhase("Preparing DNSTT client")
-            phase = E2ePhase.TUNNEL_SETUP
+            reportPhase(E2ePhase.TUNNEL_SETUP, "Preparing DNSTT client")
 
             val resolver = resolverEndpoint(request.resolverAddress, request.resolverPort)
             // Ask Go to bind an OS-assigned port, then read the actual bound
@@ -67,8 +72,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             )
             client = dnsttClient
 
-            onPhase("Establishing encrypted DNSTT handshake")
-            phase = E2ePhase.HANDSHAKE
+            reportPhase(E2ePhase.HANDSHAKE, "Establishing encrypted DNSTT handshake")
             dnsttClient.start()
             check(dnsttClient.isRunning) { "DNSTT client did not enter the running state" }
             val localPort = dnsttClient.getListenPort()
@@ -82,8 +86,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 // false-positive handshake pass.
                 result = handshakeStateOnlyResult(elapsedMs(startedAt))
             } else {
-                onPhase("Verifying SOCKS5 forwarding and HTTP traffic")
-                phase = E2ePhase.APPLICATION_REQUEST
+                reportPhase(E2ePhase.APPLICATION_REQUEST, "Verifying SOCKS5 forwarding and HTTP traffic")
                 val statusCode = verifyHttpThroughSocks5(
                     proxyPort = localPort.toInt(),
                     verificationUrl = request.verificationUrl,
