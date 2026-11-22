@@ -32,6 +32,12 @@ data class E2eHistoryEntity(
     /** Contextual provider match only; never proof of resolver ownership. */
     val providerId: String? = null,
     val profileId: String,
+    /** Snapshot of the exact tested profile; old rows may have empty defaults. */
+    val profileName: String = "",
+    val serverHost: String = "",
+    val serverPort: Int = 0,
+    val dnsttServerPublicKey: String? = null,
+    val slipstreamTlsServerName: String? = null,
     val tunnelProtocol: String,
     val verificationMode: String,
     val status: String,
