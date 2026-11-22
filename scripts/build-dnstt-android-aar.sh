@@ -38,9 +38,8 @@ cd "$WORK/dnstt"
 go mod download
 go mod verify
 
-# Adapt the upstream callback to a gomobile-bindable interface. gomobile
-# exposes interface methods as a Java callback stub, while this upstream
-# function-type callback is not present in the generated Java API.
+# Adapt the upstream callback to a gomobile-bindable interface. Also expose
+# the actual ephemeral listener port so Kotlin never races to reserve a port.
 python3 - <<'PY'
 from pathlib import Path
 p = Path("mobile/mobile.go")
@@ -56,6 +55,8 @@ replacements = [
     ("// SetProtectSocket sets a callback to protect sockets from VPN routing\nfunc (c *DnsttClient) SetProtectSocket(protectFunc ProtectSocketFunc) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protectFunc\n}",
      "// SetSocketProtector installs the Android socket-protection callback before Start.\nfunc (c *DnsttClient) SetSocketProtector(protector SocketProtector) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protector\n}"),
     ("if !c.protectSocket(int(fd)) {", "if !c.protectSocket.Protect(int(fd)) {"),
+    ("// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {",
+     "// GetListenPort returns the actual TCP port selected by the local listener.\nfunc (c *DnsttClient) GetListenPort() int {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tif c.listener == nil {\n\t\treturn 0\n\t}\n\taddr, ok := c.listener.Addr().(*net.TCPAddr)\n\tif !ok {\n\t\treturn 0\n\t}\n\treturn addr.Port\n}\n\n// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {"),
 ]
 for old, new in replacements:
     if old not in s:
@@ -76,13 +77,13 @@ GOFLAGS="-trimpath" gomobile bind -v \
   -target="$TARGETS" \
   -o "$OUT" ./mobile
 
-# Fail CI unless the Java API actually exposes the VPN socket-protection hook.
 VERIFY="$WORK/aar-verify"
 mkdir -p "$VERIFY"
 unzip -q "$OUT" classes.jar -d "$VERIFY"
 API="$(javap -classpath "$VERIFY/classes.jar" -public mobile.DnsttClient mobile.Mobile mobile.SocketProtector)"
 printf '%s\n' "$API"
 grep -q 'setSocketProtector' <<<"$API"
+grep -q 'getListenPort()' <<<"$API"
 grep -q 'protect(long)' <<<"$API"
 
 test -s "$OUT"
