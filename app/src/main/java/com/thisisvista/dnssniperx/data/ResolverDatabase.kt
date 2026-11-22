@@ -234,6 +234,35 @@ abstract class ResolverDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS e2e_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        resolverAddress TEXT NOT NULL,
+                        resolverPort INTEGER NOT NULL,
+                        testedAt INTEGER NOT NULL,
+                        networkKey TEXT NOT NULL,
+                        networkTransport TEXT NOT NULL,
+                        networkLabel TEXT,
+                        operatorName TEXT,
+                        providerId TEXT,
+                        profileId TEXT NOT NULL,
+                        tunnelProtocol TEXT NOT NULL,
+                        verificationMode TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        phase TEXT NOT NULL,
+                        elapsedMs INTEGER NOT NULL,
+                        httpStatusCode INTEGER,
+                        errorMessage TEXT
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_e2e_history_resolverAddress_resolverPort_testedAt ON e2e_history(resolverAddress, resolverPort, testedAt)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_e2e_history_networkKey_testedAt ON e2e_history(networkKey, testedAt)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_e2e_history_status_testedAt ON e2e_history(status, testedAt)")
+            }
+        }
+
         @Volatile private var instance: ResolverDatabase? = null
 
         fun getInstance(context: Context): ResolverDatabase =
@@ -242,7 +271,7 @@ abstract class ResolverDatabase : RoomDatabase() {
                     context.applicationContext,
                     ResolverDatabase::class.java,
                     "dns-sniperx.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also { instance = it }
             }
     }
 }
