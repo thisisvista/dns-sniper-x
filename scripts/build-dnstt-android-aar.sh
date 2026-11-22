@@ -38,6 +38,32 @@ cd "$WORK/dnstt"
 go mod download
 go mod verify
 
+# Adapt the upstream callback to a gomobile-bindable interface. gomobile
+# exposes interface methods as a Java callback stub, while this upstream
+# function-type callback is not present in the generated Java API.
+python3 - <<'PY'
+from pathlib import Path
+p = Path("mobile/mobile.go")
+s = p.read_text()
+replacements = [
+    ("// ProtectSocketFunc is a callback to protect a socket from VPN routing\ntype ProtectSocketFunc func(fd int) bool",
+     "// SocketProtector is implemented by Android to exclude the resolver socket from VPN routing.\ntype SocketProtector interface {\n\tProtect(fd int) bool\n}"),
+    ("\ttunFd         int\n\tprotectSocket ProtectSocketFunc",
+     "\tprotectSocket SocketProtector"),
+    ("\t\ttunFd:      -1,\n", ""),
+    ("// SetTunFd sets the TUN file descriptor for routing traffic\nfunc (c *DnsttClient) SetTunFd(fd int) {\n\tc.tunFd = fd\n}\n\n",
+     ""),
+    ("// SetProtectSocket sets a callback to protect sockets from VPN routing\nfunc (c *DnsttClient) SetProtectSocket(protectFunc ProtectSocketFunc) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protectFunc\n}",
+     "// SetSocketProtector installs the Android socket-protection callback before Start.\nfunc (c *DnsttClient) SetSocketProtector(protector SocketProtector) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protector\n}"),
+    ("if !c.protectSocket(int(fd)) {", "if !c.protectSocket.Protect(int(fd)) {"),
+]
+for old, new in replacements:
+    if old not in s:
+        raise SystemExit("Expected upstream source fragment not found; refusing an unsafe partial patch")
+    s = s.replace(old, new, 1)
+p.write_text(s)
+PY
+
 export PATH="$(go env GOPATH)/bin:$PATH"
 go install "golang.org/x/mobile/cmd/gomobile@$GOMOBILE_VERSION"
 gomobile init
@@ -50,6 +76,15 @@ GOFLAGS="-trimpath" gomobile bind -v \
   -target="$TARGETS" \
   -o "$OUT" ./mobile
 
+# Fail CI unless the Java API actually exposes the VPN socket-protection hook.
+VERIFY="$WORK/aar-verify"
+mkdir -p "$VERIFY"
+unzip -q "$OUT" classes.jar -d "$VERIFY"
+API="$(javap -classpath "$VERIFY/classes.jar" -public mobile.DnsttClient mobile.Mobile mobile.SocketProtector)"
+printf '%s\n' "$API"
+grep -q 'setSocketProtector' <<<"$API"
+grep -q 'protect(long)' <<<"$API"
+
 test -s "$OUT"
-echo "DNSTT AAR built: $OUT"
+echo "DNSTT AAR built and Java API verified: $OUT"
 sha256sum "$OUT"
