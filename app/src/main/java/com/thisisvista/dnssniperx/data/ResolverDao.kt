@@ -556,6 +556,9 @@ interface ResolverDao {
     @Query("DELETE FROM provider_discovery_state WHERE selectionKey = :selectionKey")
     suspend fun deleteProviderDiscoveryState(selectionKey: String)
 
+    @Query("DELETE FROM provider_discovery_state")
+    suspend fun deleteAllProviderDiscoveryStates()
+
     @Query("SELECT * FROM resolver_evidence WHERE address = :address AND port = :port ORDER BY collectedAt DESC, id DESC")
     suspend fun getResolverEvidence(address: String, port: Int): List<ResolverEvidenceEntity>
 
