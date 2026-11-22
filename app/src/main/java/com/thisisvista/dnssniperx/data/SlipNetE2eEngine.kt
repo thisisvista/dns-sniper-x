@@ -44,7 +44,9 @@ data class SlipNetE2eRequest(
     val profile: TunnelProfile,
     val mode: E2eVerificationMode,
     val timeoutMs: Long = 15_000,
-    val verificationUrl: String = "http://www.gstatic.com/generate_204"
+    val verificationUrl: String = "http://www.gstatic.com/generate_204",
+    /** Exact expected status avoids treating captive-portal HTML as internet success. */
+    val expectedHttpStatusCode: Int? = 204
 ) {
     fun validate(): List<String> = buildList {
         if (resolverAddress.isBlank() || resolverAddress.any(Char::isWhitespace)) {
@@ -56,6 +58,9 @@ data class SlipNetE2eRequest(
         if (mode == E2eVerificationMode.FULL &&
             (!verificationUrl.startsWith("http://") && !verificationUrl.startsWith("https://"))
         ) add("Full verification requires an HTTP or HTTPS URL")
+        if (expectedHttpStatusCode != null && expectedHttpStatusCode !in 100..599) {
+            add("Expected HTTP status must be between 100 and 599")
+        }
     }
 }
 
