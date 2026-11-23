@@ -55,6 +55,12 @@ replacements = [
     ("if !c.protectSocket(int(fd)) {", "if !c.protectSocket.Protect(int(fd)) {"),
     ("// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {",
      "// GetListenPort returns the actual TCP port selected by the local listener.\nfunc (c *DnsttClient) GetListenPort() int {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tif c.listener == nil {\n\t\treturn 0\n\t}\n\taddr, ok := c.listener.Addr().(*net.TCPAddr)\n\tif !ok {\n\t\treturn 0\n\t}\n\treturn addr.Port\n}\n\n// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {"),
+    ("\t\"sync\"\n\t\"time\"", "\t\"sync\"\n\t\"sync/atomic\"\n\t\"time\""),
+    ("\tmu            sync.Mutex\n\trunning", "\tmu            sync.Mutex\n\tstartConn     atomic.Pointer[net.UDPConn]\n\trunning"),
+    ("\tpconn, err := net.ListenUDP(\"udp4\", localAddr)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to create UDP socket: %v\", err)\n\t}",
+     "\tpconn, err := net.ListenUDP(\"udp4\", localAddr)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"failed to create UDP socket: %v\", err)\n\t}\n\t// Publish the in-progress transport before the blocking Noise handshake.\n\tc.startConn.Store(pconn)\n\tdefer c.startConn.CompareAndSwap(pconn, nil)"),
+    ("// Stop stops the client\nfunc (c *DnsttClient) Stop() {",
+     "// CancelStart interrupts an in-progress Start without waiting for the lifecycle mutex.\n// It is safe to call when Start is not running.\nfunc (c *DnsttClient) CancelStart() {\n\tif conn := c.startConn.Load(); conn != nil {\n\t\t_ = conn.Close()\n\t}\n}\n\n// Stop stops the client\nfunc (c *DnsttClient) Stop() {"),
     # Always cancel background packet loops and close partially initialized resources on Start errors.
     ("\tc.ctx, c.cancel = context.WithCancel(context.Background())\n",
      "\tc.ctx, c.cancel = context.WithCancel(context.Background())\n\tstarted := false\n\tdefer func() {\n\t\tif started {\n\t\t\treturn\n\t\t}\n\t\tif c.cancel != nil { c.cancel() }\n\t\tif c.listener != nil { _ = c.listener.Close(); c.listener = nil }\n\t\tif c.sess != nil { _ = c.sess.Close(); c.sess = nil }\n\t\tif c.conn != nil { _ = c.conn.Close(); c.conn = nil }\n\t}()\n"),
@@ -203,6 +209,38 @@ func TestSendLoopCancellationInterruptsIdlePollTimerWait(t *testing.T) {
 }
 ''')
 PY
+
+# Verify the exported startup-cancel method closes the currently published UDP transport.
+Path("mobile/mobile_cancel_test.go").write_text(r'''package mobile
+
+import (
+	"net"
+	"testing"
+	"time"
+)
+
+func TestCancelStartClosesPublishedStartupTransport(t *testing.T) {
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil { t.Fatal(err) }
+	client := &DnsttClient{}
+	client.startConn.Store(conn)
+
+	readDone := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 32)
+		_, _, readErr := conn.ReadFromUDP(buf)
+		readDone <- readErr
+	}()
+
+	client.CancelStart()
+	select {
+	case err := <-readDone:
+		if err == nil { t.Fatal("expected startup UDP read to be interrupted") }
+	case <-time.After(time.Second):
+		t.Fatal("CancelStart did not interrupt the UDP socket read")
+	}
+}
+''')
 
 # Exercise the pinned upstream packages after the compatibility and lifecycle patches.
 go test ./...
