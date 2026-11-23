@@ -71,6 +71,19 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
 
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-unit-test-reports
+          path: |
+            app/build/reports/tests/testDebugUnitTest/**
+            app/build/test-results/testDebugUnitTest/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Build and publish the APK before emulator tests. A broken hosted
+      # emulator must not prevent delivery of an otherwise buildable APK.
       - name: Run Android instrumentation and UI E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
