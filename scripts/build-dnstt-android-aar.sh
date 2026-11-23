@@ -72,12 +72,12 @@ replacements = [
      "\t\t\tcase <-pollTimer.C:\n\t\t\t\tpollTimerExpired = true\n\t\t\tcase <-ctx.Done():\n\t\t\t\tpollTimer.Stop()\n\t\t\t\treturn"),
 
     # Prioritize cancellation even while outgoing packets are continuously queued.
-    ("\\tfor {\\n\\t\\tvar p []byte\\n\\t\\toutgoing := c.QueuePacketConn.OutgoingQueue(addr)",
-     "\\tfor {\\n\\t\\tselect { case <-ctx.Done(): pollTimer.Stop(); return; default: }\\n\\t\\tvar p []byte\\n\\t\\toutgoing := c.QueuePacketConn.OutgoingQueue(addr)"),
-    ("\\t\\t\\tif !pollTimer.Stop() {\\n\\t\\t\\t\\t<-pollTimer.C\\n\\t\\t\\t}",
-     "\\t\\t\\tif !pollTimer.Stop() {\\n\\t\\t\\t\\tselect { case <-pollTimer.C: default: }\\n\\t\\t\\t}"),
-    ("\\t\\tpollTimer.Reset(pollDelay)\\n\\n\\t\\terr := c.send(transport, p, addr)",
-     "\\t\\tpollTimer.Reset(pollDelay)\\n\\t\\tselect { case <-ctx.Done(): pollTimer.Stop(); return; default: }\\n\\n\\t\\terr := c.send(transport, p, addr)"),
+    ("\tfor {\n\t\tvar p []byte\n\t\toutgoing := c.QueuePacketConn.OutgoingQueue(addr)",
+     "\tfor {\n\t\tselect { case <-ctx.Done(): pollTimer.Stop(); return; default: }\n\t\tvar p []byte\n\t\toutgoing := c.QueuePacketConn.OutgoingQueue(addr)"),
+    ("\t\t\tif !pollTimer.Stop() {\n\t\t\t\t<-pollTimer.C\n\t\t\t}",
+     "\t\t\tif !pollTimer.Stop() {\n\t\t\t\tselect { case <-pollTimer.C: default: }\n\t\t\t}"),
+    ("\t\tpollTimer.Reset(pollDelay)\n\n\t\terr := c.send(transport, p, addr)",
+     "\t\tpollTimer.Reset(pollDelay)\n\t\tselect { case <-ctx.Done(): pollTimer.Stop(); return; default: }\n\n\t\terr := c.send(transport, p, addr)"),
 ]
 for old, new in replacements:
     if old not in s:
