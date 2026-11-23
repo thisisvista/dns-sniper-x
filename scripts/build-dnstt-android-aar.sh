@@ -38,8 +38,7 @@ cd "$WORK/dnstt"
 go mod download
 go mod verify
 
-# Adapt the upstream callback to a gomobile-bindable interface. Also expose
-# the actual ephemeral listener port so Kotlin never races to reserve a port.
+# Adapt the upstream callback/API for gomobile and harden failed-start cleanup.
 python3 - <<'PY'
 from pathlib import Path
 p = Path("mobile/mobile.go")
@@ -50,17 +49,31 @@ replacements = [
     ("\ttunFd         int\n\tprotectSocket ProtectSocketFunc",
      "\tprotectSocket SocketProtector"),
     ("\t\ttunFd:      -1,\n", ""),
-    ("// SetTunFd sets the TUN file descriptor for routing traffic\nfunc (c *DnsttClient) SetTunFd(fd int) {\n\tc.tunFd = fd\n}\n\n",
-     ""),
+    ("// SetTunFd sets the TUN file descriptor for routing traffic\nfunc (c *DnsttClient) SetTunFd(fd int) {\n\tc.tunFd = fd\n}\n\n", ""),
     ("// SetProtectSocket sets a callback to protect sockets from VPN routing\nfunc (c *DnsttClient) SetProtectSocket(protectFunc ProtectSocketFunc) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protectFunc\n}",
      "// SetSocketProtector installs the Android socket-protection callback before Start.\nfunc (c *DnsttClient) SetSocketProtector(protector SocketProtector) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.protectSocket = protector\n}"),
     ("if !c.protectSocket(int(fd)) {", "if !c.protectSocket.Protect(int(fd)) {"),
     ("// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {",
      "// GetListenPort returns the actual TCP port selected by the local listener.\nfunc (c *DnsttClient) GetListenPort() int {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tif c.listener == nil {\n\t\treturn 0\n\t}\n\taddr, ok := c.listener.Addr().(*net.TCPAddr)\n\tif !ok {\n\t\treturn 0\n\t}\n\treturn addr.Port\n}\n\n// DialTunnel creates a connection through the tunnel to the specified address\nfunc (c *DnsttClient) DialTunnel(address string) (net.Conn, error) {"),
+    # Always cancel background packet loops and close partially initialized resources on Start errors.
+    ("\tc.ctx, c.cancel = context.WithCancel(context.Background())\n",
+     "\tc.ctx, c.cancel = context.WithCancel(context.Background())\n\tstarted := false\n\tdefer func() {\n\t\tif started {\n\t\t\treturn\n\t\t}\n\t\tif c.cancel != nil { c.cancel() }\n\t\tif c.listener != nil { _ = c.listener.Close(); c.listener = nil }\n\t\tif c.sess != nil { _ = c.sess.Close(); c.sess = nil }\n\t\tif c.conn != nil { _ = c.conn.Close(); c.conn = nil }\n\t}()\n"),
+    ("\tdnsConn := newDNSPacketConn(pconn, remoteAddr, domain)",
+     "\tdnsConn := newDNSPacketConn(c.ctx, pconn, remoteAddr, domain)"),
+    ("\tc.running = true\n\tlog.Printf(\"dnstt client started, listening on %s\", c.listenAddr)",
+     "\tc.running = true\n\tstarted = true\n\tlog.Printf(\"dnstt client started, listening on %s\", c.listenAddr)"),
+    ("func newDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) *dnsPacketConn {",
+     "func newDNSPacketConn(ctx context.Context, transport net.PacketConn, addr net.Addr, domain dns.Name) *dnsPacketConn {"),
+    ("\tgo c.sendLoop(transport, addr)",
+     "\tgo c.sendLoop(ctx, transport, addr)"),
+    ("func (c *dnsPacketConn) sendLoop(transport net.PacketConn, addr net.Addr) {",
+     "func (c *dnsPacketConn) sendLoop(ctx context.Context, transport net.PacketConn, addr net.Addr) {"),
+    ("\t\t\tcase <-pollTimer.C:\n\t\t\t\tpollTimerExpired = true",
+     "\t\t\tcase <-pollTimer.C:\n\t\t\t\tpollTimerExpired = true\n\t\t\tcase <-ctx.Done():\n\t\t\t\tpollTimer.Stop()\n\t\t\t\treturn"),
 ]
 for old, new in replacements:
     if old not in s:
-        raise SystemExit("Expected upstream source fragment not found; refusing an unsafe partial patch")
+        raise SystemExit("Expected upstream source fragment not found; refusing an unsafe partial patch: " + old[:100])
     s = s.replace(old, new, 1)
 p.write_text(s)
 PY
