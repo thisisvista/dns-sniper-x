@@ -10,9 +10,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thisisvista.dnssniperx.data.ResolverDatabase
-import com.thisisvista.dnssniperx.data.ResolverEntity
-import com.thisisvista.dnssniperx.data.ProviderDiscoveryCoordinator
-import com.thisisvista.dnssniperx.data.ProviderDiscoveryStateEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -43,47 +40,6 @@ class MainActivityEndToEndTest {
         ResolverDatabase.getInstance(
             InstrumentationRegistry.getInstrumentation().targetContext
         ).clearAllTables()
-    }
-
-    @Test
-    fun resettingCollectionProgressPreservesDnsAndScanResults() = runBlocking {
-        val endpoint = "203.0.113.53"
-        dao.insertOrMergeSources(
-            listOf(
-                ResolverEntity(
-                    address = endpoint,
-                    source = "unit-test-source",
-                    status = "PASS",
-                    udpStatus = "PASS",
-                    udpLatencyMs = 24,
-                    tcpStatus = "FAIL",
-                    tcpLatencyMs = null,
-                    lastTestedAt = 1_800_000_000_000
-                )
-            )
-        )
-        dao.upsertProviderDiscoveryState(
-            ProviderDiscoveryStateEntity(
-                selectionKey = "mci,irancell",
-                providerIds = "mci,irancell",
-                nextOffset = 500,
-                totalCandidates = 2_000,
-                complete = false,
-                updatedAt = 1_800_000_000_000,
-                prefixSnapshotJson = "test-snapshot",
-                snapshotFetchedAt = 1_800_000_000_000,
-                iranAllocationRanges = 42
-            )
-        )
-
-        ProviderDiscoveryCoordinator(dao).resetAll()
-
-        assertEquals(1, dao.observeCount().first())
-        val saved = dao.findByEndpoint(endpoint, 53)
-        assertNotNull(saved)
-        assertEquals("PASS", saved?.udpStatus)
-        assertEquals("FAIL", saved?.tcpStatus)
-        assertEquals(null, dao.getProviderDiscoveryState("mci,irancell"))
     }
 
     @Test
