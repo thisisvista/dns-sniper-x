@@ -303,6 +303,7 @@ API="$(javap -classpath "$VERIFY/classes.jar" -public mobile.DnsttClient mobile.
 printf '%s\n' "$API"
 grep -q 'setSocketProtector' <<<"$API"
 grep -q 'getListenPort()' <<<"$API"
+grep -q 'cancelStart()' <<<"$API"
 grep -q 'protect(long)' <<<"$API"
 
 test -s "$OUT"
