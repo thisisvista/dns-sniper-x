@@ -84,6 +84,17 @@ jobs:
 
       # Build and publish the APK before emulator tests. A broken hosted
       # emulator must not prevent delivery of an otherwise buildable APK.
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run Android instrumentation and UI E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -114,17 +125,6 @@ jobs:
             app/build/reports/androidTests/connected/debug/**
             app/build/outputs/androidTest-results/connected/debug/**
           if-no-files-found: warn
-          retention-days: 14
-
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: dns-sniperx-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
           retention-days: 14
 
       - name: Upload generated Gradle wrapper
