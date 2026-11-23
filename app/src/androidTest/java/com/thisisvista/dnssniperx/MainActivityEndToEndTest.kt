@@ -68,17 +68,10 @@ class MainActivityEndToEndTest {
                 dao.observeCount().first { it == 1 }
             }
         }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
-        }
-        // The saved-resolver list is below the import controls; scroll it into view.
-        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
 
-        // Importing the same endpoint again must not create a second library row.
+        // Exercise duplicate import while the import controls are still in view.
+        // Avoid scrolling down to the resolver list and then back up while the
+        // soft keyboard is opening on slower CI emulators.
         composeRule.onNodeWithText("DNS addresses")
             .performScrollTo()
             .performTextInput(address)
@@ -96,6 +89,16 @@ class MainActivityEndToEndTest {
                 dao.observeCount().first { it == 1 }
             }
         }
+
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
+        }
+        // The saved-resolver list is below the import controls; scroll it into view.
+        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("1 DNS entries saved on this device.")
             .performScrollTo()
             .assertIsDisplayed()
