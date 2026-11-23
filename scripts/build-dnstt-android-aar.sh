@@ -84,6 +84,124 @@ for old, new in replacements:
         raise SystemExit("Expected upstream source fragment not found; refusing an unsafe partial patch: " + old[:100])
     s = s.replace(old, new, 1)
 p.write_text(s)
+
+# Add focused tests for the patched sender-loop cancellation behavior.
+Path("mobile/mobile_lifecycle_test.go").write_text(r'''package mobile
+
+import (
+	"context"
+	"net"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"www.bamsoftware.com/git/dnstt.git/dns"
+	"www.bamsoftware.com/git/dnstt.git/turbotunnel"
+)
+
+type lifecycleTestPacketConn struct {
+	writes atomic.Int64
+}
+
+func (c *lifecycleTestPacketConn) ReadFrom([]byte) (int, net.Addr, error) {
+	return 0, nil, net.ErrClosed
+}
+func (c *lifecycleTestPacketConn) WriteTo(p []byte, _ net.Addr) (int, error) {
+	c.writes.Add(1)
+	return len(p), nil
+}
+func (c *lifecycleTestPacketConn) Close() error                       { return nil }
+func (c *lifecycleTestPacketConn) LocalAddr() net.Addr                 { return &net.UDPAddr{} }
+func (c *lifecycleTestPacketConn) SetDeadline(time.Time) error         { return nil }
+func (c *lifecycleTestPacketConn) SetReadDeadline(time.Time) error     { return nil }
+func (c *lifecycleTestPacketConn) SetWriteDeadline(time.Time) error    { return nil }
+
+func newLifecycleTestDNSPacketConn(t *testing.T) (*dnsPacketConn, net.Addr) {
+	t.Helper()
+	domain, err := dns.ParseName("t.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 53}
+	queue := turbotunnel.NewQueuePacketConn(&net.UDPAddr{}, 0)
+	return &dnsPacketConn{
+		clientID:        turbotunnel.NewClientID(),
+		domain:          domain,
+		pollChan:        make(chan struct{}, pollLimit),
+		QueuePacketConn: queue,
+	}, addr
+}
+
+func awaitLoopExit(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("sendLoop did not exit promptly after cancellation")
+	}
+}
+
+func TestSendLoopCancellationIsNotStarvedByContinuouslyQueuedPackets(t *testing.T) {
+	packetConn, addr := newLifecycleTestDNSPacketConn(t)
+	transport := &lifecycleTestPacketConn{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		packetConn.sendLoop(ctx, transport, addr)
+		close(done)
+	}()
+
+	stopWriter := make(chan struct{})
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		packet := []byte{1, 2, 3, 4}
+		for {
+			select {
+			case <-stopWriter:
+				return
+			default:
+				_, _ = packetConn.QueuePacketConn.WriteTo(packet, addr)
+			}
+		}
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for transport.writes.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if transport.writes.Load() == 0 {
+		close(stopWriter)
+		<-writerDone
+		cancel()
+		awaitLoopExit(t, done)
+		t.Fatal("sendLoop did not process any queued packets")
+	}
+
+	cancel()
+	awaitLoopExit(t, done)
+	close(stopWriter)
+	select {
+	case <-writerDone:
+	case <-time.After(time.Second):
+		t.Fatal("packet producer did not stop")
+	}
+}
+
+func TestSendLoopCancellationInterruptsIdlePollTimerWait(t *testing.T) {
+	packetConn, addr := newLifecycleTestDNSPacketConn(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		packetConn.sendLoop(ctx, &lifecycleTestPacketConn{}, addr)
+		close(done)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+	awaitLoopExit(t, done)
+}
+''')
 PY
 
 # Exercise the pinned upstream packages after the compatibility and lifecycle patches.
