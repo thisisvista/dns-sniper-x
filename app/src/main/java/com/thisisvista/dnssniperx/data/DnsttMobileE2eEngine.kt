@@ -40,6 +40,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         var phase = E2ePhase.NOT_STARTED
         var client: mobile.DnsttClient? = null
         val activeSocket = AtomicReference<Socket?>(null)
+        val activeClient = AtomicReference<mobile.DnsttClient?>(null)
         var result: SlipNetE2eResult
         fun reportPhase(next: E2ePhase, label: String) {
             phase = next
@@ -64,7 +65,8 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         // registered handler is guaranteed to be disposed by the try/finally.
         val cancellationHandle = closeSocketOnJobCancellation(
             currentCoroutineContext().job,
-            activeSocket
+            activeSocket,
+            activeClient
         )
         try {
             reportPhase(E2ePhase.TUNNEL_SETUP, "Preparing DNSTT client")
@@ -85,6 +87,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
                 listenAddress
             )
             client = dnsttClient
+            activeClient.set(dnsttClient)
 
             reportPhase(E2ePhase.HANDSHAKE, "Establishing encrypted DNSTT handshake")
             dnsttClient.start()
@@ -130,6 +133,7 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             )
         } finally {
             cancellationHandle.dispose()
+            activeClient.set(null)
             try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
             try {
                 client?.stop()
@@ -309,12 +313,16 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
 @OptIn(InternalCoroutinesApi::class)
 internal fun closeSocketOnJobCancellation(
     job: Job,
-    activeSocket: AtomicReference<Socket?>
+    activeSocket: AtomicReference<Socket?>,
+    activeClient: AtomicReference<mobile.DnsttClient?>? = null
 ): DisposableHandle = job.invokeOnCompletion(
     onCancelling = true,
     invokeImmediately = true
 ) { cause ->
     if (cause is CancellationException) {
+        // CancelStart does not acquire the Go lifecycle mutex, so it can break
+        // a Start() blocked in the Noise handshake before Stop() is attempted.
+        try { activeClient?.get()?.cancelStart() } catch (_: Exception) {}
         try { activeSocket.getAndSet(null)?.close() } catch (_: Exception) {}
     }
 }
