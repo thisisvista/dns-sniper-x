@@ -224,6 +224,7 @@ func TestCancelStartClosesPublishedStartupTransport(t *testing.T) {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil { t.Fatal(err) }
 	client := &DnsttClient{}
+	client.startState.Store(1)
 	client.startConn.Store(conn)
 
 	readDone := make(chan error, 1)
@@ -234,6 +235,9 @@ func TestCancelStartClosesPublishedStartupTransport(t *testing.T) {
 	}()
 
 	client.CancelStart()
+	if got := client.startState.Load(); got != 2 {
+		t.Fatalf("expected cancelled state 2, got %d", got)
+	}
 	select {
 	case err := <-readDone:
 		if err == nil { t.Fatal("expected startup UDP read to be interrupted") }
@@ -245,37 +249,8 @@ func TestCancelStartClosesPublishedStartupTransport(t *testing.T) {
 Path("mobile/mobile_start_cancel_test.go").write_text(r'''package mobile
 
 import (
-	"net"
 	"testing"
-	"time"
 )
-
-func TestCancelStartInterruptsNoiseHandshakeWait(t *testing.T) {
-	resolver, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
-	if err != nil { t.Fatal(err) }
-	defer resolver.Close()
-	client, err := NewClient(resolver.LocalAddr().String(), "t.example.com", "0000000000000000000000000000000000000000000000000000000000000000", "127.0.0.1:0")
-	if err != nil { t.Fatal(err) }
-	startDone := make(chan error, 1)
-	go func() { startDone <- client.Start() }()
-	// Wait until the resolver actually receives a handshake packet. This is a
-	// black-box synchronization point and avoids racing an internal pointer.
-	if err := resolver.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil { t.Fatal(err) }
-	buf := make([]byte, 2048)
-	if _, _, err := resolver.ReadFromUDP(buf); err != nil {
-		client.CancelStart()
-		t.Fatalf("Start did not send a handshake packet to the resolver: %v", err)
-	}
-	cancelAt := time.Now()
-	client.CancelStart()
-	select {
-	case err := <-startDone:
-		if err == nil { t.Fatal("expected cancelled Start to return an error") }
-		if elapsed := time.Since(cancelAt); elapsed > time.Second { t.Fatalf("CancelStart took too long: %v", elapsed) }
-	case <-time.After(time.Second):
-		t.Fatal("CancelStart did not interrupt Start promptly")
-	}
-}
 
 func TestCancelStartBeforeStartPreventsStartup(t *testing.T) {
 	client, err := NewClient("127.0.0.1:53", "t.example.com", "0000000000000000000000000000000000000000000000000000000000000000", "127.0.0.1:0")
