@@ -258,9 +258,14 @@ func TestCancelStartInterruptsNoiseHandshakeWait(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	startDone := make(chan error, 1)
 	go func() { startDone <- client.Start() }()
-	deadline := time.Now().Add(2 * time.Second)
-	for client.startConn.Load() == nil && time.Now().Before(deadline) { time.Sleep(time.Millisecond) }
-	if client.startConn.Load() == nil { t.Fatal("Start did not publish its UDP transport") }
+	// Wait until the resolver actually receives a handshake packet. This is a
+	// black-box synchronization point and avoids racing an internal pointer.
+	if err := resolver.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil { t.Fatal(err) }
+	buf := make([]byte, 2048)
+	if _, _, err := resolver.ReadFromUDP(buf); err != nil {
+		client.CancelStart()
+		t.Fatalf("Start did not send a handshake packet to the resolver: %v", err)
+	}
 	cancelAt := time.Now()
 	client.CancelStart()
 	select {
