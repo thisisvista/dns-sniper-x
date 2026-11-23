@@ -86,6 +86,9 @@ for old, new in replacements:
 p.write_text(s)
 PY
 
+# Exercise the pinned upstream packages after the compatibility and lifecycle patches.
+go test ./...
+
 export PATH="$(go env GOPATH)/bin:$PATH"
 go install "golang.org/x/mobile/cmd/gomobile@$GOMOBILE_VERSION"
 gomobile init
