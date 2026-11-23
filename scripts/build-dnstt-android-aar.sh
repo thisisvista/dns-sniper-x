@@ -208,9 +208,6 @@ func TestSendLoopCancellationInterruptsIdlePollTimerWait(t *testing.T) {
 	awaitLoopExit(t, done)
 }
 ''')
-PY
-
-# Verify the exported startup-cancel method closes the currently published UDP transport.
 Path("mobile/mobile_cancel_test.go").write_text(r'''package mobile
 
 import (
@@ -241,6 +238,7 @@ func TestCancelStartClosesPublishedStartupTransport(t *testing.T) {
 	}
 }
 ''')
+PY
 
 # Exercise the pinned upstream packages after the compatibility and lifecycle patches.
 go test ./...
