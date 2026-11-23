@@ -40,10 +40,6 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
         var phase = E2ePhase.NOT_STARTED
         var client: mobile.DnsttClient? = null
         val activeSocket = AtomicReference<Socket?>(null)
-        val cancellationHandle = closeSocketOnJobCancellation(
-            currentCoroutineContext().job,
-            activeSocket
-        )
         var result: SlipNetE2eResult
         fun reportPhase(next: E2ePhase, label: String) {
             phase = next
@@ -64,6 +60,12 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             return@withContext SlipNetE2eResult.notConfigured("This engine supports DNSTT profiles only")
         }
 
+        // Register only after all early-return validation paths, so every
+        // registered handler is guaranteed to be disposed by the try/finally.
+        val cancellationHandle = closeSocketOnJobCancellation(
+            currentCoroutineContext().job,
+            activeSocket
+        )
         try {
             reportPhase(E2ePhase.TUNNEL_SETUP, "Preparing DNSTT client")
 
