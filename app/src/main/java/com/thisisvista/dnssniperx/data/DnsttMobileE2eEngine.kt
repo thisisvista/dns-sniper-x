@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import java.util.concurrent.atomic.AtomicReference
 import mobile.Mobile
@@ -88,6 +89,9 @@ class DnsttMobileE2eEngine : SlipNetE2eEngine {
             )
             client = dnsttClient
             activeClient.set(dnsttClient)
+            // Close the small race where cancellation happens just before the
+            // native client is published to the cancellation callback.
+            currentCoroutineContext().ensureActive()
 
             reportPhase(E2ePhase.HANDSHAKE, "Establishing encrypted DNSTT handshake")
             dnsttClient.start()
