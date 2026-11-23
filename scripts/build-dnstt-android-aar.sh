@@ -62,7 +62,7 @@ replacements = [
     ("// Stop stops the client\nfunc (c *DnsttClient) Stop() {",
      "// CancelStart interrupts Start without waiting for the lifecycle mutex.\nfunc (c *DnsttClient) CancelStart() {\n\tfor {\n\t\tstate := c.startState.Load()\n\t\tif state >= 2 { break }\n\t\tif c.startState.CompareAndSwap(state, 2) { break }\n\t}\n\tif conn := c.startKcp.Load(); conn != nil { _ = conn.Close() }\n\tif conn := c.startConn.Load(); conn != nil { _ = conn.Close() }\n\tif c.startState.Load() == 3 { c.Stop() }\n}\n\n// Stop stops the client\nfunc (c *DnsttClient) Stop() {"),
     ("// Start starts the SOCKS5 proxy\nfunc (c *DnsttClient) Start() error {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\n\tif c.running {\n\t\treturn nil\n\t}",
-     "// Start starts the SOCKS5 proxy\nfunc (c *DnsttClient) Start() error {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\n\tif c.running {\n\t\treturn nil\n\t}\n\tif !c.startState.CompareAndSwap(0, 1) {\n\t\treturn fmt.Errorf(\"DNSTT start was cancelled\")\n\t}\n\tstarted := false\n\tdefer func() { if !started { c.startState.CompareAndSwap(1, 0) } }()"),
+     "// Start starts the SOCKS5 proxy\nfunc (c *DnsttClient) Start() error {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\n\tif c.running {\n\t\treturn nil\n\t}\n\tif !c.startState.CompareAndSwap(0, 1) {\n\t\treturn fmt.Errorf(\"DNSTT start was cancelled\")\n\t}\n\tlifecycleStarted := false\n\tdefer func() { if !lifecycleStarted { c.startState.CompareAndSwap(1, 0) } }()"),
     ("\tkcpConn, err := kcp.NewConn2(remoteAddr, nil, 0, 0, dnsConn)\n\tif err != nil {\n\t\tpconn.Close()\n\t\treturn fmt.Errorf(\"opening KCP conn: %v\", err)\n\t}",
      "\tkcpConn, err := kcp.NewConn2(remoteAddr, nil, 0, 0, dnsConn)\n\tif err != nil {\n\t\tpconn.Close()\n\t\treturn fmt.Errorf(\"opening KCP conn: %v\", err)\n\t}\n\tc.startKcp.Store(kcpConn)\n\tdefer c.startKcp.CompareAndSwap(kcpConn, nil)\n\tif c.startState.Load() == 2 { _ = kcpConn.Close(); return fmt.Errorf(\"DNSTT start was cancelled\") }"),
     # Always cancel background packet loops and close partially initialized resources on Start errors.
@@ -71,7 +71,7 @@ replacements = [
     ("\tdnsConn := newDNSPacketConn(pconn, remoteAddr, domain)",
      "\tdnsConn := newDNSPacketConn(c.ctx, pconn, remoteAddr, domain)"),
     ("\tc.running = true\n\tlog.Printf(\"dnstt client started, listening on %s\", c.listenAddr)",
-     "\tif !c.startState.CompareAndSwap(1, 3) { return fmt.Errorf(\"DNSTT start was cancelled\") }\n\tc.running = true\n\tstarted = true\n\tlog.Printf(\"dnstt client started, listening on %s\", c.listenAddr)"),
+     "\tif !c.startState.CompareAndSwap(1, 3) { return fmt.Errorf(\"DNSTT start was cancelled\") }\n\tlifecycleStarted = true\n\tc.running = true\n\tstarted = true\n\tlog.Printf(\"dnstt client started, listening on %s\", c.listenAddr)"),
     ("func newDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) *dnsPacketConn {",
      "func newDNSPacketConn(ctx context.Context, transport net.PacketConn, addr net.Addr, domain dns.Name) *dnsPacketConn {"),
     ("\tgo c.sendLoop(transport, addr)",
