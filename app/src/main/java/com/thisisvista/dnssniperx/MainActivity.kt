@@ -116,7 +116,6 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var dohResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DohProbeResult>()) }
     var isDotTesting by rememberSaveable { mutableStateOf(false) }
     var dotResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DotProbeResult>()) }
-    var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     // The scan is owned by a foreground service, not by this Compose screen.
