@@ -81,9 +81,9 @@ import com.thisisvista.dnssniperx.ui.theme.DnsSniperXTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,6 +119,23 @@ private fun DnsSniperXApp(dao: ResolverDao) {
     var scanJob by androidx.compose.runtime.remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // The scan is owned by a foreground service, not by this Compose screen.
+    // Poll its persisted state so returning from another app restores live progress.
+    LaunchedEffect(context) {
+        val scanState = context.getSharedPreferences(
+            com.thisisvista.dnssniperx.data.DnsScanForegroundService.PREFERENCES,
+            Context.MODE_PRIVATE
+        )
+        while (true) {
+            val running = scanState.getBoolean("running", false)
+            val progress = scanState.getString("progress", "") ?: ""
+            val status = scanState.getString("message", "") ?: ""
+            if (isScanning != running) isScanning = running
+            if (scanProgress != progress) scanProgress = progress
+            if (status.isNotBlank() && message != status) message = status
+            delay(600)
+        }
+    }
     val providers by dao.observeProviders().collectAsState(initial = emptyList())
     val networkMonitor = androidx.compose.runtime.remember(context) { ActiveNetworkMonitor(context) }
     val activeNetwork by networkMonitor.state.collectAsState()
@@ -438,115 +455,18 @@ private fun DnsSniperXApp(dao: ResolverDao) {
                 }
             },
             onScan = { retryUnsuccessful, sourceFilter ->
+                val scanIntent = android.content.Intent(context, com.thisisvista.dnssniperx.data.DnsScanForegroundService::class.java)
                 if (isScanning) {
-                    scanJob?.cancel()
-                    message = "Pause requested. The current batch will stop; completed batches are already saved."
+                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_STOP
+                    context.startService(scanIntent)
                 } else {
-                    scanJob = scope.launch {
-                        isScanning = true
-                        var completed = 0
-                        try {
-                            // Keep the scan job active while counting so Pause works even
-                            // when the library is large and the initial query takes time.
-                            val total = dao.countPendingScan(retryUnsuccessful, sourceFilter)
-                            if (total == 0) {
-                                message = if (retryUnsuccessful) {
-                                    "No previously tested DNS entries need a retry."
-                                } else {
-                                    "No untested DNS entries remain. Use Retry unsuccessful / warnings to test them again."
-                                }
-                                return@launch
-                            }
-
-                            var lastId = 0L
-                            scanProgress = "0 / $total"
-                            var pausedForThermal = false
-                            var batchIndex = 0
-                            while (true) {
-                                val batch = dao.getPendingScanBatch(
-                                    retryUnsuccessful = retryUnsuccessful,
-                                    sourceFilter = sourceFilter,
-                                    afterId = lastId,
-                                    limit = ScanResourcePolicy.MAX_SCAN_BATCH_SIZE
-                                )
-                                if (batch.isEmpty()) break
-                                lastId = batch.last().id
-                                batchIndex += 1
-
-                                val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                                val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                                val batteryPercent = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                                    .takeIf { it in 0..100 } ?: -1
-                                val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    powerManager.currentThermalStatus
-                                } else {
-                                    PowerManager.THERMAL_STATUS_NONE
-                                }
-                                if (ScanResourcePolicy.shouldPauseForThermal(thermalStatus)) {
-                                    pausedForThermal = true
-                                    message = "Scan paused automatically because the device is critically hot. Let it cool, then resume."
-                                    break
-                                }
-
-                                val scanParallelism = ScanResourcePolicy.recommendedParallelism(
-                                    thermalStatus = thermalStatus,
-                                    batteryPercent = batteryPercent,
-                                    powerSaveMode = powerManager.isPowerSaveMode
-                                )
-                                val totalBatches = (total + ScanResourcePolicy.MAX_SCAN_BATCH_SIZE - 1) /
-                                    ScanResourcePolicy.MAX_SCAN_BATCH_SIZE
-                                message = "Scanning batch $batchIndex of $totalBatches… (parallelism $scanParallelism)"
-                                DnsProbe.scan(batch, parallelism = scanParallelism) { result ->
-                                    val best = listOfNotNull(
-                                        result.udp.latencyMs.takeIf { result.udp.status == "PASS" },
-                                        result.tcp.latencyMs.takeIf { result.tcp.status == "PASS" }
-                                    ).minOrNull()
-                                    val overall = when {
-                                        result.udp.status == "PASS" || result.tcp.status == "PASS" -> "DNS_PASS"
-                                        result.udp.status == "TIMEOUT" || result.tcp.status == "TIMEOUT" -> "TIMEOUT"
-                                        else -> "FAILED"
-                                    }
-                                    val notes = DnsProbe.buildDiagnosticNote(result.udp.detail, result.tcp.detail)
-                                    val historyResolver = batch.firstOrNull { it.id == result.resolverId }
-                                    val testedAt = System.currentTimeMillis()
-                                    dao.saveScanResult(
-                                        history = ScanHistoryEntity(
-                                            resolverAddress = historyResolver?.address ?: "Unknown",
-                                            resolverPort = historyResolver?.port ?: 53,
-                                            testedAt = testedAt,
-                                            udpStatus = result.udp.status,
-                                            udpLatencyMs = result.udp.latencyMs,
-                                            tcpStatus = result.tcp.status,
-                                            tcpLatencyMs = result.tcp.latencyMs,
-                                            scanMode = if (retryUnsuccessful) "RETRY" else "SCAN"
-                                        ),
-                                        resolverId = result.resolverId,
-                                        udpStatus = result.udp.status,
-                                        udpLatencyMs = result.udp.latencyMs,
-                                        tcpStatus = result.tcp.status,
-                                        tcpLatencyMs = result.tcp.latencyMs,
-                                        testedAt = testedAt,
-                                        overallStatus = overall,
-                                        bestLatency = best,
-                                        note = notes
-                                    )
-                                    completed += 1
-                                    scanProgress = "$completed / $total"
-                                }
-                            }
-                            if (!pausedForThermal) {
-                                message = "Scan complete: $completed DNS entries tested and saved."
-                            }
-                        } catch (cancelled: CancellationException) {
-                            message = "Scan paused. Completed results were saved; press Resume to continue."
-                            throw cancelled
-                        } catch (exception: Exception) {
-                            AppLogger.record(dao, context, "ERROR", "dns-scanner", "DNS scan stopped unexpectedly", exception, stage = "scan")
-                            message = "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry."
-                        } finally {
-                            isScanning = false
-                            scanJob = null
-                        }
+                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_START
+                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_RETRY_UNSUCCESSFUL, retryUnsuccessful)
+                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_SOURCE_FILTER, sourceFilter)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(scanIntent)
+                    } else {
+                        context.startService(scanIntent)
                     }
                 }
             },
