@@ -1,13 +1,14 @@
 package com.thisisvista.dnssniperx.data
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.DatagramPacket
@@ -46,16 +47,15 @@ object DnsProbe {
             resolvers.take(MAX_BATCH_SIZE).map { resolver ->
                 async {
                     semaphore.withPermit {
-                        // Let an active resolver finish and save its result before honoring pause.
-                        // This prevents completed probes from being lost when a batch is cancelled.
-                        withContext(NonCancellable) {
-                            val result = ResolverScanResult(
-                                resolver.id,
-                                probe(resolver, useTcp = false),
-                                probe(resolver, useTcp = true)
-                            )
-                            onResult(result)
-                        }
+                        // Socket probes are blocking but have bounded timeouts. Check
+                        // cancellation between transports so Stop does not continue
+                        // processing every remaining resolver in the current batch.
+                        currentCoroutineContext().ensureActive()
+                        val udp = probe(resolver, useTcp = false)
+                        currentCoroutineContext().ensureActive()
+                        val tcp = probe(resolver, useTcp = true)
+                        currentCoroutineContext().ensureActive()
+                        onResult(ResolverScanResult(resolver.id, udp, tcp))
                     }
                 }
             }.awaitAll()
