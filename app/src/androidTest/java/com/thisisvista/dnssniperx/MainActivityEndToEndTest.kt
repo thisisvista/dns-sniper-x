@@ -92,9 +92,14 @@ class MainActivityEndToEndTest {
             }
         }
 
+        // Close the soft keyboard before changing tabs. On slower hosted emulators,
+        // the IME can cover the tab row and leave the Activity backgrounded during
+        // the subsequent scroll/semantics wait.
+        composeRule.pressBack()
+
         // Saved resolver browsing now lives on the Results tab, not Collect & Scan.
         // Room above verifies persistence; now verify the user-facing list projection.
-        composeRule.onNodeWithText("Results").performClick()
+        composeRule.onNodeWithText("Results").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
