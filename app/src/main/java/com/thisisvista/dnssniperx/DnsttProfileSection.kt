@@ -57,7 +57,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
     var message by rememberSaveable { mutableStateOf("Enter your DNSTT server details and save the profile.") }
     var saving by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(existing?.id, existing?.updatedAt) {
+    LaunchedEffect(existing?.id) {
         if (existing != null && loadedProfileId != existing.id) {
             profileName = existing.name
             serverHost = existing.serverHost
