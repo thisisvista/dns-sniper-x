@@ -45,7 +45,6 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
     val dnsttProfiles = profiles.filter { it.protocol == TunnelProtocol.DNSTT }
     var selectedProfileId by rememberSaveable { mutableStateOf("") }
     val selectedProfile = dnsttProfiles.firstOrNull { it.id == selectedProfileId }
-        ?: dnsttProfiles.firstOrNull()
     val scope = rememberCoroutineScope()
     var profileMenuExpanded by remember { mutableStateOf(false) }
 
@@ -58,6 +57,12 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
     var loadedProfileId by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("Enter your DNSTT server details and save the profile.") }
     var saving by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(dnsttProfiles) {
+        if (selectedProfileId.isBlank() && dnsttProfiles.isNotEmpty()) {
+            selectedProfileId = dnsttProfiles.first().id
+        }
+    }
 
     LaunchedEffect(selectedProfile?.id, selectedProfile?.name, selectedProfile?.serverHost, selectedProfile?.serverPort, selectedProfile?.dnsttServerPublicKey) {
         if (selectedProfile != null && loadedProfileId != selectedProfile.id) {
@@ -102,7 +107,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
             }
             OutlinedButton(
                 onClick = {
-                    selectedProfileId = ""
+                    selectedProfileId = "__NEW__"
                     loadedProfileId = ""
                     profileName = "New DNSTT server"
                     serverHost = ""
