@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
@@ -68,6 +69,18 @@ internal fun E2eVerificationSection(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
+    val savedDnsttProfile = profiles.firstOrNull { it.protocol == TunnelProtocol.DNSTT.name }
+        ?.let(TunnelProfileMapper::toModel)
+    LaunchedEffect(
+        savedDnsttProfile?.id,
+        savedDnsttProfile?.serverHost,
+        savedDnsttProfile?.dnsttServerPublicKey
+    ) {
+        if (savedDnsttProfile != null) {
+            tunnelDomain = savedDnsttProfile.serverHost
+            publicKey = savedDnsttProfile.dnsttServerPublicKey.orEmpty()
+        }
+    }
     val attemptsFlow = remember(resolverIp) {
         if (resolverIp.isBlank()) flowOf(emptyList())
         else historyDao.observeResolverAttempts(resolverIp.trim(), 53, 10)
@@ -204,8 +217,8 @@ internal fun E2eVerificationSection(
                         elapsed = null
                         try {
                             val profile = TunnelProfile(
-                                id = "dnstt-e2e-manual",
-                                name = "DNSTT E2E test profile",
+                                id = savedDnsttProfile?.id ?: "dnstt-e2e-manual",
+                                name = savedDnsttProfile?.name ?: "DNSTT E2E test profile",
                                 protocol = TunnelProtocol.DNSTT,
                                 serverHost = tunnelDomain.trim(),
                                 // DNSTT's client binding has no separate server-port setting.
