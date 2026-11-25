@@ -1,6 +1,7 @@
 package com.thisisvista.dnssniperx
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -100,6 +101,12 @@ class MainActivityEndToEndTest {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
+
+        // The hosted API 34 software emulator can leave the app Activity STOPPED
+        // after the IME/test host switches windows. Restore the tested Activity to
+        // the foreground before ActivityScenarioRule performs its automatic close.
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeRule.waitForIdle()
 
         // Room is the durable source of truth. Activity recreation is covered
         // separately by database/repository instrumentation; recreating a live
