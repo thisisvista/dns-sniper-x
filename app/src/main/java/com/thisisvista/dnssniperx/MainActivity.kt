@@ -1025,6 +1025,7 @@ private fun HomeContent(
             }
         }
 
+        DnsttProfileSection(dao = dao)
         DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
         PrivacyDisclosureSection()
 
