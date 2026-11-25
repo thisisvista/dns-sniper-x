@@ -44,6 +44,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -66,6 +67,12 @@ internal fun E2eVerificationSection(
     var exporting by remember { mutableStateOf(false) }
     var exportMessage by rememberSaveable { mutableStateOf("") }
     var testJob by remember { mutableStateOf<Job?>(null) }
+    var batchJob by remember { mutableStateOf<Job?>(null) }
+    var batchTotal by rememberSaveable { mutableStateOf(0) }
+    var batchCompleted by rememberSaveable { mutableStateOf(0) }
+    var batchPassed by rememberSaveable { mutableStateOf(0) }
+    var batchFailed by rememberSaveable { mutableStateOf(0) }
+    var batchSkipped by rememberSaveable { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
@@ -265,7 +272,7 @@ internal fun E2eVerificationSection(
                     testJob = job
                     job.start()
                 },
-                enabled = enabled && !running && testJob == null &&
+                enabled = enabled && !running && testJob == null && batchJob == null &&
                     resolverIp.isNotBlank() && tunnelDomain.isNotBlank() && publicKey.length == 64,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -276,7 +283,125 @@ internal fun E2eVerificationSection(
                     Text("Save profile and run real E2E test")
                 }
             }
-            if (running) {
+            Button(
+                onClick = {
+                    val job = scope.launch(start = CoroutineStart.LAZY) {
+                        running = true
+                        status = "BATCH_RUNNING"
+                        detail = "Loading all saved Working DNS candidates…"
+                        batchCompleted = 0
+                        batchPassed = 0
+                        batchFailed = 0
+                        batchSkipped = 0
+                        try {
+                            val profile = TunnelProfile(
+                                id = savedDnsttProfile?.id ?: "dnstt-e2e-manual",
+                                name = savedDnsttProfile?.name ?: "DNSTT E2E test profile",
+                                protocol = TunnelProtocol.DNSTT,
+                                serverHost = tunnelDomain.trim(),
+                                serverPort = savedDnsttProfile?.serverPort ?: 53,
+                                dnsttServerPublicKey = publicKey.trim()
+                            )
+                            val errors = profile.validate()
+                            require(errors.isEmpty()) { errors.joinToString("; ") }
+                            resolverDao.saveTunnelProfile(
+                                TunnelProfileMapper.toEntity(profile, resolverDao.findTunnelProfile(profile.id))
+                            )
+
+                            // Read every compatible Working DNS in bounded Room pages; do not cap at 10 or 15.
+                            val candidates = linkedSetOf<String>()
+                            var offset = 0
+                            val pageSize = 500
+                            while (true) {
+                                val page = resolverDao.getSlipNetExportBatch(pageSize, offset)
+                                if (page.isEmpty()) break
+                                page.mapTo(candidates) { it.address }
+                                offset += page.size
+                                if (page.size < pageSize) break
+                            }
+                            val addresses = candidates.toList()
+                            batchTotal = addresses.size
+                            require(addresses.isNotEmpty()) { "No saved Working DNS candidates on UDP/TCP port 53 were found." }
+
+                            val coordinator = E2eVerificationCoordinator(
+                                historyDao,
+                                mapOf(TunnelProtocol.DNSTT to (DnsttMobileE2eEngine() as SlipNetE2eEngine))
+                            )
+                            detail = "Starting sequential FULL HTTP verification for ${addresses.size} DNS resolvers…"
+                            for (address in addresses) {
+                                // A previous FULL_PASS for this exact profile is durable evidence and is not retested.
+                                val alreadyPassed = historyDao.hasFullPassForProfile(
+                                    address = address,
+                                    port = profile.serverPort,
+                                    profileId = profile.id,
+                                    serverHost = profile.serverHost,
+                                    publicKey = profile.dnsttServerPublicKey.orEmpty()
+                                )
+                                if (alreadyPassed) {
+                                    batchSkipped++
+                                    batchCompleted++
+                                    continue
+                                }
+                                resolverIp = address
+                                detail = "Testing ${batchCompleted + 1}/${batchTotal}: $address"
+                                val result = coordinator.verify(
+                                    resolverAddress = address,
+                                    resolverPort = profile.serverPort,
+                                    profile = profile,
+                                    mode = E2eVerificationMode.FULL,
+                                    network = network,
+                                    timeoutMs = 25_000,
+                                    verificationUrl = "http://www.gstatic.com/generate_204",
+                                    expectedHttpStatusCode = 204,
+                                    onPhase = { phase -> scope.launch { detail = "$address · $phase" } }
+                                )
+                                batchCompleted++
+                                if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
+                                    batchPassed++
+                                } else {
+                                    batchFailed++
+                                }
+                                status = "BATCH_RUNNING"
+                                yield()
+                            }
+                            status = "BATCH_COMPLETED"
+                            detail = "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped."
+                        } catch (cancelled: CancellationException) {
+                            status = "BATCH_PAUSED"
+                            detail = "Paused at $batchCompleted/$batchTotal. Verified FULL_PASS results are saved; start again to resume and skip those successes."
+                        } catch (failure: Exception) {
+                            status = "BATCH_ERROR"
+                            detail = failure.message ?: failure.javaClass.simpleName
+                        } finally {
+                            running = false
+                            batchJob = null
+                        }
+                    }
+                    batchJob = job
+                    job.start()
+                },
+                enabled = enabled && !running && testJob == null && batchJob == null &&
+                    tunnelDomain.isNotBlank() && publicKey.length == 64,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Start / Resume FULL E2E for all Working DNS")
+            }
+            if (batchTotal > 0) {
+                Text(
+                    "Batch progress: $batchCompleted/$batchTotal · PASS $batchPassed · FAIL $batchFailed · skipped $batchSkipped",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            if (running && batchJob != null) {
+                OutlinedButton(
+                    onClick = { batchJob?.cancel(CancellationException("Batch paused by user")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Pause batch E2E")
+                }
+            }
+            if (running && testJob != null) {
                 OutlinedButton(
                     onClick = { testJob?.cancel(CancellationException("Cancelled by user")) },
                     modifier = Modifier.fillMaxWidth()
