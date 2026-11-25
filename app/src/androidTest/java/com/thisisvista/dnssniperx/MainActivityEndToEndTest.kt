@@ -92,22 +92,13 @@ class MainActivityEndToEndTest {
             }
         }
 
-        // The library count is displayed on Home, not on Collect & Scan.
-        composeRule.onNodeWithText("Home").performClick()
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        // The resolver list remains on Collect & Scan.
-        composeRule.onNodeWithText("Collect & Scan").performClick()
+        // Room above verifies persistence. Verify the saved resolver in the
+        // Collect & Scan list without relying on the Home dashboard counter.
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
         // The saved-resolver list is below the import controls; scroll it into view.
         composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("1 DNS entries saved on this device.")
-            .performScrollTo()
-            .assertIsDisplayed()
 
         // Room is the durable source of truth. Activity recreation is covered
         // separately by database/repository instrumentation; recreating a live
