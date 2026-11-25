@@ -663,7 +663,7 @@ private fun HomeContent(
     val pageSize = 100
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
+    LaunchedEffect(selectedTab, selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
         isLoadingResolvers = true
         resolvers = emptyList()
         try {
