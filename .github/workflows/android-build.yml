@@ -30,6 +30,41 @@ jobs:
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0
 
+      - name: Set up Go for the DNSTT mobile library
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.3"
+
+      - name: Build pinned DNSTT Go library for Android arm64
+        env:
+          DNSTT_UPSTREAM_COMMIT: 8155cde0353433646aceacca1414913fc9a304a7
+          ANDROID_NDK_VERSION: 27.2.12479018
+        run: |
+          set -euxo pipefail
+          sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+          export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME}" >> "$GITHUB_ENV"
+          git clone --filter=blob:none https://github.com/dnstt-xyz/dnstt_xyz_app.git "$RUNNER_TEMP/dnstt-upstream"
+          git -C "$RUNNER_TEMP/dnstt-upstream" checkout "$DNSTT_UPSTREAM_COMMIT"
+          cp native/dnstt/sniperxbridge/bridge.go "$RUNNER_TEMP/dnstt-upstream/go_src/sniperxbridge.go.tmp"
+          mkdir -p "$RUNNER_TEMP/dnstt-upstream/go_src/sniperxbridge"
+          mv "$RUNNER_TEMP/dnstt-upstream/go_src/sniperxbridge.go.tmp" "$RUNNER_TEMP/dnstt-upstream/go_src/sniperxbridge/bridge.go"
+          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260112195712-5b9ecdfb8721
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
+          cd "$RUNNER_TEMP/dnstt-upstream/go_src"
+          mkdir -p "$GITHUB_WORKSPACE/app/libs"
+          gomobile bind -v -androidapi 26 -target=android/arm64 -o "$GITHUB_WORKSPACE/app/libs/dnstt.aar" ./sniperxbridge
+          test -s "$GITHUB_WORKSPACE/app/libs/dnstt.aar"
+
+      - name: Upload generated DNSTT Android library
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-dnstt-aar
+          path: app/libs/dnstt.aar
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

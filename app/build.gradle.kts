@@ -45,6 +45,8 @@ kotlin {
 }
 
 dependencies {
+    // Generated from the pinned upstream DNSTT Go client during Android CI.
+    implementation(files("libs/dnstt.aar"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
