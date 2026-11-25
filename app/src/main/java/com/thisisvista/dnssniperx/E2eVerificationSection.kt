@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -71,17 +69,8 @@ internal fun E2eVerificationSection(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
-    val savedDnsttProfiles = profiles
-        .filter { it.protocol == TunnelProtocol.DNSTT.name }
-        .mapNotNull(TunnelProfileMapper::toModel)
-    var selectedProfileId by rememberSaveable { mutableStateOf("") }
-    val savedDnsttProfile = savedDnsttProfiles.firstOrNull { it.id == selectedProfileId }
-    var profileMenuExpanded by remember { mutableStateOf(false) }
-    LaunchedEffect(savedDnsttProfiles) {
-        if (selectedProfileId.isBlank() && savedDnsttProfiles.isNotEmpty()) {
-            selectedProfileId = savedDnsttProfiles.first().id
-        }
-    }
+    val savedDnsttProfile = profiles.firstOrNull { it.protocol == TunnelProtocol.DNSTT.name }
+        ?.let(TunnelProfileMapper::toModel)
     LaunchedEffect(
         savedDnsttProfile?.id,
         savedDnsttProfile?.serverHost,
@@ -156,24 +145,6 @@ internal fun E2eVerificationSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(
-                onClick = { profileMenuExpanded = true },
-                enabled = !running && savedDnsttProfiles.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(savedDnsttProfile?.let { "DNSTT profile: ${it.name} · ${it.serverHost}" } ?: "No saved DNSTT profile")
-            }
-            DropdownMenu(expanded = profileMenuExpanded, onDismissRequest = { profileMenuExpanded = false }) {
-                savedDnsttProfiles.forEach { profile ->
-                    DropdownMenuItem(
-                        text = { Text("${profile.name} · ${profile.serverHost}") },
-                        onClick = {
-                            selectedProfileId = profile.id
-                            profileMenuExpanded = false
-                        }
-                    )
-                }
-            }
             OutlinedTextField(
                 value = resolverIp,
                 onValueChange = { resolverIp = it },
@@ -233,7 +204,7 @@ internal fun E2eVerificationSection(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                "Saved DNSTT profiles: ${savedDnsttProfiles.size}. Select one above; add or manage profiles in Settings.",
+                "Saved DNSTT profiles: ${profiles.count { it.protocol == TunnelProtocol.DNSTT.name }}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -246,7 +217,7 @@ internal fun E2eVerificationSection(
                         elapsed = null
                         try {
                             val profile = TunnelProfile(
-                                id = savedDnsttProfile?.id ?: java.util.UUID.randomUUID().toString(),
+                                id = savedDnsttProfile?.id ?: "dnstt-e2e-manual",
                                 name = savedDnsttProfile?.name ?: "DNSTT E2E test profile",
                                 protocol = TunnelProtocol.DNSTT,
                                 serverHost = tunnelDomain.trim(),
@@ -261,7 +232,6 @@ internal fun E2eVerificationSection(
                             resolverDao.saveTunnelProfile(
                                 TunnelProfileMapper.toEntity(profile, resolverDao.findTunnelProfile(profile.id))
                             )
-                            selectedProfileId = profile.id
                             val coordinator = E2eVerificationCoordinator(
                                 historyDao,
                                 mapOf(TunnelProtocol.DNSTT to (DnsttMobileE2eEngine() as SlipNetE2eEngine))
