@@ -223,7 +223,7 @@ internal fun E2eVerificationSection(
                                 serverHost = tunnelDomain.trim(),
                                 // DNSTT's client binding has no separate server-port setting.
                                 // The resolver endpoint is supplied independently to verify().
-                                serverPort = 53,
+                                serverPort = savedDnsttProfile?.serverPort ?: 53,
                                 dnsttServerPublicKey = publicKey.trim()
                             )
                             val errors = profile.validate()
@@ -238,7 +238,7 @@ internal fun E2eVerificationSection(
                             )
                             val result = coordinator.verify(
                                 resolverAddress = resolverIp.trim(),
-                                resolverPort = 53,
+                                resolverPort = profile.serverPort,
                                 profile = profile,
                                 mode = E2eVerificationMode.FULL,
                                 network = network,
