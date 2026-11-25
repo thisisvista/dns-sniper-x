@@ -642,8 +642,8 @@ private fun HomeContent(
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
-    var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
     var showResetCollectionConfirmation by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
@@ -694,9 +694,15 @@ private fun HomeContent(
         }
     }
     Column(
-        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("HOME" to "Home", "COLLECT" to "Collect & Scan", "E2E" to "E2E", "RESULTS" to "Results", "SETTINGS" to "Settings").forEach { (key, label) ->
+                FilterChip(selected = selectedTab == key, onClick = { selectedTab = key }, label = { Text(label) })
+            }
+        }
+        if (selectedTab == "HOME") {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -733,24 +739,12 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("Discover public DNS lists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Download candidates from the configured public sources. Internet access is required; downloaded addresses are not yet tested.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text("Optional network label", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Text("Choose the network provider you are currently using. This is a user label, not automatic ISP verification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Unspecified", "Irancell", "MCI", "Rightel", "TCI", "Shatel", "Asiatech", "Sabanet", "Pars Online", "Other").forEach { provider ->
-                FilterChip(selected = selectedProvider == provider, onClick = { selectedProvider = provider }, label = { Text(provider) })
-            }
-        }
-        Button(onClick = { onCollectNetworkDns(selectedProvider) }, enabled = !isCollecting && !isImporting && !isScanning, modifier = Modifier.fillMaxWidth()) {
-            Text("Detect and save current network DNS")
-        }
-        Text(
-            "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -800,6 +794,9 @@ private fun HomeContent(
             )
         }
 
+        }
+
+        if (selectedTab == "SETTINGS") {
         Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
@@ -890,6 +887,9 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "E2E") {
         E2eVerificationSection(
             resolverDao = dao,
             historyDao = e2eHistoryDao,
@@ -897,6 +897,9 @@ private fun HomeContent(
             enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting
         )
 
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Sends a standard DNS query over UDP and TCP. Untested entries are scanned automatically in small batches of up to 10. Concurrency adapts from 1 to 4 based on device temperature and battery conditions. Completed results are saved so scanning can resume after interruption.",
@@ -940,6 +943,9 @@ private fun HomeContent(
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
@@ -965,6 +971,9 @@ private fun HomeContent(
             Text("Import to local library")
         }
 
+        }
+
+        if (selectedTab == "RESULTS") {
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(
             value = resolverSearch,
@@ -1080,6 +1089,9 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "RESULTS") {
         Text("Recent public source collection history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Latest 100 source attempts are saved locally. A missing terms note means the source terms have not been documented in this app; it is not a license assertion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (sourceHistory.isEmpty()) {
@@ -1119,8 +1131,14 @@ private fun HomeContent(
             }
         }
 
-        DnsttProfileSection(dao = dao)
-        DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
+        }
+
+        if (selectedTab == "E2E") {
+            DnsttProfileSection(dao = dao)
+        }
+        if (selectedTab == "SETTINGS") {
+            DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
+            }
         PrivacyDisclosureSection()
 
         Text(
