@@ -92,12 +92,12 @@ class MainActivityEndToEndTest {
             }
         }
 
-        // Room above verifies persistence. Verify the saved resolver in the
-        // Collect & Scan list without relying on the Home dashboard counter.
+        // Saved resolver browsing now lives on the Results tab, not Collect & Scan.
+        // Room above verifies persistence; now verify the user-facing list projection.
+        composeRule.onNodeWithText("Results").performClick()
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
-        // The saved-resolver list is below the import controls; scroll it into view.
         composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
 
         // Room is the durable source of truth. Activity recreation is covered
