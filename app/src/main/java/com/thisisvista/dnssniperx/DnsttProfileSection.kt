@@ -132,7 +132,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                             try {
                                 repository.saveProfile(profile)
                                 loadedProfileId = profile.id
-                                message = "DNSTT profile saved securely on this device. E2E engine integration is still pending."
+                                message = "DNSTT profile saved on this device. E2E engine integration is still pending."
                             } catch (error: Exception) {
                                 message = "Could not save profile: ${error.message ?: "unknown error"}"
                             } finally {
