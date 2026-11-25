@@ -10,7 +10,8 @@ package com.thisisvista.dnssniperx.data
 interface SlipNetE2eEngine {
     suspend fun verify(
         request: SlipNetE2eRequest,
-        onPhase: (String) -> Unit = {}
+        onPhase: (String) -> Unit = {},
+        onPhaseChanged: (E2ePhase) -> Unit = {}
     ): SlipNetE2eResult
 }
 
@@ -32,6 +33,8 @@ enum class E2ePhase {
 enum class E2eStatus {
     NOT_CONFIGURED,
     NOT_TESTED,
+    CANCELLED,
+    TIMEOUT,
     HANDSHAKE_PASS,
     HANDSHAKE_FAIL,
     FULL_PASS,
@@ -44,7 +47,9 @@ data class SlipNetE2eRequest(
     val profile: TunnelProfile,
     val mode: E2eVerificationMode,
     val timeoutMs: Long = 15_000,
-    val verificationUrl: String = "http://www.gstatic.com/generate_204"
+    val verificationUrl: String = "http://www.gstatic.com/generate_204",
+    /** Exact expected status avoids treating captive-portal HTML as internet success. */
+    val expectedHttpStatusCode: Int? = 204
 ) {
     fun validate(): List<String> = buildList {
         if (resolverAddress.isBlank() || resolverAddress.any(Char::isWhitespace)) {
@@ -56,6 +61,9 @@ data class SlipNetE2eRequest(
         if (mode == E2eVerificationMode.FULL &&
             (!verificationUrl.startsWith("http://") && !verificationUrl.startsWith("https://"))
         ) add("Full verification requires an HTTP or HTTPS URL")
+        if (expectedHttpStatusCode != null && expectedHttpStatusCode !in 100..599) {
+            add("Expected HTTP status must be between 100 and 599")
+        }
     }
 }
 
@@ -89,11 +97,12 @@ object E2eResultGate {
         requestedMode: E2eVerificationMode,
         result: SlipNetE2eResult
     ): E2eStatus {
-        // These are workflow states, not failed network tests. Preserve them so
-        // reports never imply that an unavailable engine actually attempted E2E.
+        // Workflow states are not failed network tests; preserve them verbatim.
         when (result.status) {
-            E2eStatus.NOT_CONFIGURED -> return E2eStatus.NOT_CONFIGURED
-            E2eStatus.NOT_TESTED -> return E2eStatus.NOT_TESTED
+            E2eStatus.NOT_CONFIGURED,
+            E2eStatus.NOT_TESTED,
+            E2eStatus.CANCELLED,
+            E2eStatus.TIMEOUT -> return result.status
             else -> Unit
         }
 

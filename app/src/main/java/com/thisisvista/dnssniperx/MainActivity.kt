@@ -89,13 +89,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val dao = ResolverDatabase.getInstance(applicationContext).resolverDao()
-        setContent { DnsSniperXTheme { DnsSniperXApp(dao) } }
+        val database = ResolverDatabase.getInstance(applicationContext)
+        val dao = database.resolverDao()
+        val e2eHistoryDao = database.e2eHistoryDao()
+        setContent { DnsSniperXTheme { DnsSniperXApp(dao, e2eHistoryDao) } }
     }
 }
 
 @Composable
-private fun DnsSniperXApp(dao: ResolverDao) {
+private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao) {
     var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
     LaunchedEffect(dao) { dao.observeResolverInvalidation().debounce(750).collect { resolverRefreshToken++ } }
     val count by dao.observeCount().collectAsState(initial = 0)
@@ -270,6 +272,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             contentPadding = innerPadding,
             count = count,
             dao = dao,
+            e2eHistoryDao = e2eHistoryDao,
+            activeNetwork = activeNetwork,
             resolverRefreshToken = resolverRefreshToken,
             history = recentHistory,
             dohHistory = recentDohHistory,
@@ -522,6 +526,8 @@ private fun HomeContent(
     contentPadding: PaddingValues,
     count: Int,
     dao: ResolverDao,
+    e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao,
+    activeNetwork: com.thisisvista.dnssniperx.data.ActiveNetworkState,
     resolverRefreshToken: Int,
     history: List<ScanHistoryEntity>,
     dohHistory: List<DohHistoryEntity>,
@@ -803,6 +809,13 @@ private fun HomeContent(
             }
         }
 
+        E2eVerificationSection(
+            resolverDao = dao,
+            historyDao = e2eHistoryDao,
+            network = activeNetwork,
+            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting
+        )
+
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Sends a standard DNS query over UDP and TCP. Untested entries are scanned automatically in small batches of up to 10. Concurrency adapts from 1 to 4 based on device temperature and battery conditions. Completed results are saved so scanning can resume after interruption.",
@@ -1025,6 +1038,7 @@ private fun HomeContent(
             }
         }
 
+        DnsttProfileSection(dao = dao)
         DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
         PrivacyDisclosureSection()
 

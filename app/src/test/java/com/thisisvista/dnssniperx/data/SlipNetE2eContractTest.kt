@@ -80,4 +80,17 @@ class SlipNetE2eContractTest {
         )
         assertEquals(3, request.validate().size)
     }
+    @Test
+    fun requestRejectsInvalidExpectedHttpStatus() {
+        val request = SlipNetE2eRequest(
+            resolverAddress = "192.0.2.1",
+            resolverPort = 53,
+            profile = profile,
+            mode = E2eVerificationMode.FULL,
+            expectedHttpStatusCode = 99
+        )
+
+        assertEquals(true, request.validate().any { it.contains("Expected HTTP status") })
+    }
+
 }
