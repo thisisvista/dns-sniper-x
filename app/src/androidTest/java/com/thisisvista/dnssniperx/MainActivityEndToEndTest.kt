@@ -92,10 +92,14 @@ class MainActivityEndToEndTest {
             }
         }
 
+        // The library count is displayed on Home, not on Collect & Scan.
+        composeRule.onNodeWithText("Home").performClick()
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // The resolver list remains on Collect & Scan.
+        composeRule.onNodeWithText("Collect & Scan").performClick()
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
         }
