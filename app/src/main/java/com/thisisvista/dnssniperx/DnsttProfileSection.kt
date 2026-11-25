@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,11 +40,8 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
         TunnelProfileRepository(dao, AndroidKeystoreTunnelSecretStore(context))
     }
     val profiles by repository.observeProfiles().collectAsState(initial = emptyList())
-    val dnsttProfiles = profiles.filter { it.protocol == TunnelProtocol.DNSTT }
-    var selectedProfileId by rememberSaveable { mutableStateOf("") }
-    val selectedProfile = dnsttProfiles.firstOrNull { it.id == selectedProfileId }
+    val existing = profiles.firstOrNull { it.protocol == TunnelProtocol.DNSTT }
     val scope = rememberCoroutineScope()
-    var profileMenuExpanded by remember { mutableStateOf(false) }
 
     var profileName by rememberSaveable { mutableStateOf("My DNSTT server") }
     var serverHost by rememberSaveable { mutableStateOf("dns.ilovenella.dpdns.org") }
@@ -58,20 +53,13 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
     var message by rememberSaveable { mutableStateOf("Enter your DNSTT server details and save the profile.") }
     var saving by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(dnsttProfiles) {
-        if (selectedProfileId.isBlank() && dnsttProfiles.isNotEmpty()) {
-            selectedProfileId = dnsttProfiles.first().id
-        }
-    }
-
-    LaunchedEffect(selectedProfile?.id, selectedProfile?.name, selectedProfile?.serverHost, selectedProfile?.serverPort, selectedProfile?.dnsttServerPublicKey) {
-        if (selectedProfile != null && loadedProfileId != selectedProfile.id) {
-            profileName = selectedProfile.name
-            serverHost = selectedProfile.serverHost
-            serverPort = selectedProfile.serverPort.toString()
-            publicKey = selectedProfile.dnsttServerPublicKey.orEmpty()
-            loadedProfileId = selectedProfile.id
-            selectedProfileId = selectedProfile.id
+    LaunchedEffect(existing?.id, existing?.name, existing?.serverHost, existing?.serverPort, existing?.dnsttServerPublicKey) {
+        if (existing != null && loadedProfileId != existing.id) {
+            profileName = existing.name
+            serverHost = existing.serverHost
+            serverPort = existing.serverPort.toString()
+            publicKey = existing.dnsttServerPublicKey.orEmpty()
+            loadedProfileId = existing.id
             message = "Saved DNSTT profile loaded."
         }
     }
@@ -86,37 +74,10 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
         ) {
             Text("Settings · DNSTT server profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Save multiple DNSTT servers here. Select a profile to edit it, or create a separate profile for another domain and public key.",
+                "Save the domain and server public key once. The E2E verification panel reuses these saved values.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(
-                onClick = { profileMenuExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(selectedProfile?.let { "Selected: ${it.name} · ${it.serverHost}" } ?: "No saved profile selected") }
-            DropdownMenu(expanded = profileMenuExpanded, onDismissRequest = { profileMenuExpanded = false }) {
-                dnsttProfiles.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text("${item.name} · ${item.serverHost}") },
-                        onClick = {
-                            selectedProfileId = item.id
-                            profileMenuExpanded = false
-                        }
-                    )
-                }
-            }
-            OutlinedButton(
-                onClick = {
-                    selectedProfileId = "__NEW__"
-                    loadedProfileId = ""
-                    profileName = "New DNSTT server"
-                    serverHost = ""
-                    serverPort = "53"
-                    publicKey = ""
-                    message = "Enter details for a new DNSTT profile."
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("＋ Add another DNSTT profile") }
             OutlinedTextField(
                 value = profileName,
                 onValueChange = { profileName = it },
@@ -156,7 +117,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                 onClick = {
                     val port = serverPort.toIntOrNull()
                     val profile = TunnelProfile(
-                        id = selectedProfile?.id ?: UUID.randomUUID().toString(),
+                        id = existing?.id ?: UUID.randomUUID().toString(),
                         name = profileName,
                         protocol = TunnelProtocol.DNSTT,
                         serverHost = serverHost,
@@ -172,7 +133,6 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                             try {
                                 repository.saveProfile(profile)
                                 loadedProfileId = profile.id
-                                selectedProfileId = profile.id
                                 message = "DNSTT profile saved on this device."
                             } catch (error: Exception) {
                                 message = "Could not save profile: ${error.message ?: "unknown error"}"
@@ -185,17 +145,16 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                 enabled = !saving,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (saving) "Saving…" else if (selectedProfile == null) "Save new DNSTT profile" else "Update selected DNSTT profile")
+                Text(if (saving) "Saving…" else if (existing == null) "Save DNSTT profile" else "Update DNSTT profile")
             }
-            if (selectedProfile != null) {
+            if (existing != null) {
                 OutlinedButton(
                     onClick = {
                         scope.launch {
                             try {
-                                repository.deleteProfile(selectedProfile.id)
-                                selectedProfileId = ""
+                                repository.deleteProfile(existing.id)
                                 loadedProfileId = ""
-                                profileName = "New DNSTT server"
+                                profileName = "My DNSTT server"
                                 serverHost = ""
                                 serverPort = "53"
                                 publicKey = ""
@@ -208,7 +167,6 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Delete saved profile") }
             }
-            Text("${dnsttProfiles.size} saved DNSTT profile(s)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             Text(
                 "A saved profile is configuration only. FULL_PASS is recorded only after an actual HTTP response is received through the DNSTT tunnel.",
