@@ -98,7 +98,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                 onValueChange = { value -> if (value.all(Char::isDigit) && value.length <= 5) serverPort = value },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("DNS port (UDP)") }
+                label = { Text("Resolver port (UDP)") }
             )
             OutlinedTextField(
                 value = publicKey,
@@ -109,7 +109,7 @@ internal fun DnsttProfileSection(dao: ResolverDao) {
                 supportingText = { Text("${publicKey.length}/64 characters") }
             )
             Text(
-                "The current DNSTT client sends queries over UDP. The resolver IP is selected separately in the E2E test.",
+                "The resolver IP is selected separately in the E2E test; this port is used for its UDP DNS queries.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
