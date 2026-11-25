@@ -1138,15 +1138,14 @@ private fun HomeContent(
         }
         if (selectedTab == "SETTINGS") {
             DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
-            }
-        PrivacyDisclosureSection()
-
-        Text(
-            "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
+            PrivacyDisclosureSection()
+            Text(
+                "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
     }
 }
 
