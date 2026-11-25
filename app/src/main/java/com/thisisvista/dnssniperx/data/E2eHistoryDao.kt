@@ -42,6 +42,29 @@ interface E2eHistoryDao {
     @Query("SELECT COUNT(*) FROM e2e_history WHERE status = :status")
     fun observeStatusCount(status: String): Flow<Int>
 
+    /** True only when this exact DNSTT profile already has an HTTP-verified pass for the resolver. */
+    @Query("""
+        SELECT EXISTS(
+            SELECT 1 FROM e2e_history
+            WHERE resolverAddress = :address
+              AND resolverPort = :port
+              AND profileId = :profileId
+              AND serverHost = :serverHost
+              AND dnsttServerPublicKey = :publicKey
+              AND tunnelProtocol = 'DNSTT'
+              AND verificationMode = 'FULL'
+              AND status = 'FULL_PASS'
+              AND httpStatusCode = 204
+        )
+    """)
+    suspend fun hasFullPassForProfile(
+        address: String,
+        port: Int,
+        profileId: String,
+        serverHost: String,
+        publicKey: String
+    ): Boolean
+
     /**
      * SlipNet import candidates: latest successful FULL E2E proof per resolver,
      * engine profile and endpoint. Failed later retests do not erase last success.
