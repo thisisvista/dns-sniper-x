@@ -95,6 +95,21 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # Build the optimized release candidate separately from the debug APK.
+      - name: Build optimized release APK
+        run: |
+          ./gradlew assembleRelease
+          echo "Release APK size:"
+          du -h app/build/outputs/apk/release/*.apk
+
+      - name: Upload optimized release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-sniperx-optimized-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run Android instrumentation and UI E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
