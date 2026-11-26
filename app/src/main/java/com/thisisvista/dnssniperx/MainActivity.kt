@@ -89,13 +89,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val dao = ResolverDatabase.getInstance(applicationContext).resolverDao()
-        setContent { DnsSniperXTheme { DnsSniperXApp(dao) } }
+        val database = ResolverDatabase.getInstance(applicationContext)
+        val dao = database.resolverDao()
+        val e2eHistoryDao = database.e2eHistoryDao()
+        setContent { DnsSniperXTheme { DnsSniperXApp(dao, e2eHistoryDao) } }
     }
 }
 
 @Composable
-private fun DnsSniperXApp(dao: ResolverDao) {
+private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao) {
     var resolverRefreshToken by androidx.compose.runtime.remember { mutableStateOf(0) }
     LaunchedEffect(dao) { dao.observeResolverInvalidation().debounce(750).collect { resolverRefreshToken++ } }
     val count by dao.observeCount().collectAsState(initial = 0)
@@ -270,6 +272,8 @@ private fun DnsSniperXApp(dao: ResolverDao) {
             contentPadding = innerPadding,
             count = count,
             dao = dao,
+            e2eHistoryDao = e2eHistoryDao,
+            activeNetwork = activeNetwork,
             resolverRefreshToken = resolverRefreshToken,
             history = recentHistory,
             dohHistory = recentDohHistory,
@@ -522,6 +526,8 @@ private fun HomeContent(
     contentPadding: PaddingValues,
     count: Int,
     dao: ResolverDao,
+    e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao,
+    activeNetwork: com.thisisvista.dnssniperx.data.ActiveNetworkState,
     resolverRefreshToken: Int,
     history: List<ScanHistoryEntity>,
     dohHistory: List<DohHistoryEntity>,
@@ -555,8 +561,8 @@ private fun HomeContent(
     onImport: () -> Unit,
     onDelete: (Long) -> Unit
 ) {
-    var selectedProvider by rememberSaveable { mutableStateOf("Unspecified") }
     var showResetCollectionConfirmation by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
@@ -576,7 +582,7 @@ private fun HomeContent(
     val pageSize = 100
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
+    LaunchedEffect(selectedTab, selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
         isLoadingResolvers = true
         resolvers = emptyList()
         try {
@@ -607,9 +613,15 @@ private fun HomeContent(
         }
     }
     Column(
-        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("HOME" to "Home", "COLLECT" to "Collect & Scan", "E2E" to "E2E", "RESULTS" to "Results", "SETTINGS" to "Settings").forEach { (key, label) ->
+                FilterChip(selected = selectedTab == key, onClick = { selectedTab = key }, label = { Text(label) })
+            }
+        }
+        if (selectedTab == "HOME") {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -646,24 +658,12 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("Discover public DNS lists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Download candidates from the configured public sources. Internet access is required; downloaded addresses are not yet tested.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text("Optional network label", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Text("Choose the network provider you are currently using. This is a user label, not automatic ISP verification.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Unspecified", "Irancell", "MCI", "Rightel", "TCI", "Shatel", "Asiatech", "Sabanet", "Pars Online", "Other").forEach { provider ->
-                FilterChip(selected = selectedProvider == provider, onClick = { selectedProvider = provider }, label = { Text(provider) })
-            }
-        }
-        Button(onClick = { onCollectNetworkDns(selectedProvider) }, enabled = !isCollecting && !isImporting && !isScanning, modifier = Modifier.fillMaxWidth()) {
-            Text("Detect and save current network DNS")
-        }
-        Text(
-            "Reads DNS servers configured on the phone’s active Wi-Fi or mobile network. This does not prove which ISP owns them.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -713,6 +713,9 @@ private fun HomeContent(
             )
         }
 
+        }
+
+        if (selectedTab == "SETTINGS") {
         Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
@@ -803,6 +806,19 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "E2E") {
+        E2eVerificationSection(
+            resolverDao = dao,
+            historyDao = e2eHistoryDao,
+            network = activeNetwork,
+            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting
+        )
+
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Sends a standard DNS query over UDP and TCP. Untested entries are scanned automatically in small batches of up to 10. Concurrency adapts from 1 to 4 based on device temperature and battery conditions. Completed results are saved so scanning can resume after interruption.",
@@ -846,6 +862,9 @@ private fun HomeContent(
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
+        }
+
+        if (selectedTab == "COLLECT") {
         Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
@@ -871,6 +890,9 @@ private fun HomeContent(
             Text("Import to local library")
         }
 
+        }
+
+        if (selectedTab == "RESULTS") {
         Text("Saved resolvers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(
             value = resolverSearch,
@@ -986,6 +1008,9 @@ private fun HomeContent(
             }
         }
 
+        }
+
+        if (selectedTab == "RESULTS") {
         Text("Recent public source collection history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Latest 100 source attempts are saved locally. A missing terms note means the source terms have not been documented in this app; it is not a license assertion.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (sourceHistory.isEmpty()) {
@@ -1025,15 +1050,18 @@ private fun HomeContent(
             }
         }
 
-        DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
-        PrivacyDisclosureSection()
+        }
 
-        Text(
-            "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
+        if (selectedTab == "SETTINGS") {
+            DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
+            PrivacyDisclosureSection()
+            Text(
+                "DNS PASS only confirms a valid DNS response. It does not prove DNSTT, Slipstream, or internet-tunnel compatibility.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
     }
 }
 

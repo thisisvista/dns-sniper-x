@@ -45,6 +45,8 @@ kotlin {
 }
 
 dependencies {
+    // Generated from the pinned Go source by scripts/build-dnstt-android-aar.sh.
+    implementation(files("build/dnstt/dnstt.aar"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)

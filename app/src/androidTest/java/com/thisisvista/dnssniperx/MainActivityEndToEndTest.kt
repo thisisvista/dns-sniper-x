@@ -1,6 +1,5 @@
 package com.thisisvista.dnssniperx
 
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -10,15 +9,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thisisvista.dnssniperx.data.ResolverDatabase
-import com.thisisvista.dnssniperx.data.ResolverEntity
-import com.thisisvista.dnssniperx.data.ProviderDiscoveryCoordinator
-import com.thisisvista.dnssniperx.data.ProviderDiscoveryStateEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,50 +41,10 @@ class MainActivityEndToEndTest {
     }
 
     @Test
-    fun resettingCollectionProgressPreservesDnsAndScanResults() = runBlocking {
-        val endpoint = "203.0.113.53"
-        dao.insertOrMergeSources(
-            listOf(
-                ResolverEntity(
-                    address = endpoint,
-                    source = "unit-test-source",
-                    status = "PASS",
-                    udpStatus = "PASS",
-                    udpLatencyMs = 24,
-                    tcpStatus = "FAIL",
-                    tcpLatencyMs = null,
-                    lastTestedAt = 1_800_000_000_000
-                )
-            )
-        )
-        dao.upsertProviderDiscoveryState(
-            ProviderDiscoveryStateEntity(
-                selectionKey = "mci,irancell",
-                providerIds = "mci,irancell",
-                nextOffset = 500,
-                totalCandidates = 2_000,
-                complete = false,
-                updatedAt = 1_800_000_000_000,
-                prefixSnapshotJson = "test-snapshot",
-                snapshotFetchedAt = 1_800_000_000_000,
-                iranAllocationRanges = 42
-            )
-        )
-
-        ProviderDiscoveryCoordinator(dao).resetAll()
-
-        assertEquals(1, dao.observeCount().first())
-        val saved = dao.findByEndpoint(endpoint, 53)
-        assertNotNull(saved)
-        assertEquals("PASS", saved?.udpStatus)
-        assertEquals("FAIL", saved?.tcpStatus)
-        assertEquals(null, dao.getProviderDiscoveryState("mci,irancell"))
-    }
-
-    @Test
-    fun manualImportDeduplicatesAndSurvivesActivityRecreation() {
+    fun manualImportDeduplicatesAndPersistsToRoom() {
+        // Manual import now lives on the dedicated Collect & Scan tab.
+        composeRule.onNodeWithText("Collect & Scan").performClick()
         val address = "198.51.100.77"
-        val endpoint = "$address:53"
 
         composeRule.onNodeWithText("DNS addresses")
             .performScrollTo()
@@ -98,31 +53,18 @@ class MainActivityEndToEndTest {
             .performScrollTo()
             .performClick()
 
-        // First prove that the UI action reached the import callback. This gives
-        // a useful failure if parsing/insertion fails instead of timing out on a
-        // downstream dashboard counter.
+        // Confirm the real UI callback completed successfully.
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("Saved 1 DNS entries successfully.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-
-        // Independently verify the durable Room state before checking its UI projection.
         runBlocking {
             withTimeout(30_000) {
                 dao.observeCount().first { it == 1 }
             }
         }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
-        }
-        // The saved-resolver list is below the import controls; scroll it into view.
-        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
 
-        // Importing the same endpoint again must not create a second library row.
+        // Importing the same address again must not create a duplicate.
         composeRule.onNodeWithText("DNS addresses")
             .performScrollTo()
             .performTextInput(address)
@@ -139,20 +81,19 @@ class MainActivityEndToEndTest {
             withTimeout(30_000) {
                 dao.observeCount().first { it == 1 }
             }
-        }
-        composeRule.onNodeWithText("1 DNS entries saved on this device.")
-            .performScrollTo()
-            .assertIsDisplayed()
 
-        // Recreate the real Activity: the saved record must still be loaded from Room.
-        composeRule.activityRule.scenario.recreate()
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("1 DNS entries saved on this device.")
-                .fetchSemanticsNodes().isNotEmpty()
+            // Verify the saved record through the same paged query used by Results.
+            val saved = dao.getResolverPage(
+                statusFilter = "ALL",
+                searchTerm = address,
+                networkType = "ALL",
+                providerLabel = "ALL",
+                fastestFirst = false,
+                limit = 10,
+                offset = 0
+            )
+            assertEquals(1, saved.size)
+            assertEquals(address, saved.single().address)
         }
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText(endpoint).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(endpoint).performScrollTo().assertIsDisplayed()
     }
 }

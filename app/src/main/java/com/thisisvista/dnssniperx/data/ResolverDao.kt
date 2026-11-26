@@ -358,7 +358,11 @@ interface ResolverDao {
         )
           AND (
             :sourceFilter = 'ALL'
-            OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
+            OR (:sourceFilter = 'MANUAL' AND (
+                source IN ('manual', 'txt-import')
+                OR additionalSources LIKE '%manual%'
+                OR additionalSources LIKE '%txt-import%'
+            ))
             OR (:sourceFilter = 'PUBLIC' AND (
                 source IN (
                     'iran-public-dns-directory',
@@ -384,7 +388,11 @@ interface ResolverDao {
         )
           AND (
             :sourceFilter = 'ALL'
-            OR (:sourceFilter = 'MANUAL' AND source IN ('manual', 'txt-import'))
+            OR (:sourceFilter = 'MANUAL' AND (
+                source IN ('manual', 'txt-import')
+                OR additionalSources LIKE '%manual%'
+                OR additionalSources LIKE '%txt-import%'
+            ))
             OR (:sourceFilter = 'PUBLIC' AND (
                 source IN (
                     'iran-public-dns-directory',
