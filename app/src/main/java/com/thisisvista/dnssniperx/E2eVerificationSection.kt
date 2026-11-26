@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -310,6 +311,33 @@ internal fun E2eVerificationSection(
                                 TunnelProfileMapper.toEntity(profile, resolverDao.findTunnelProfile(profile.id))
                             )
 
+                            // The session start is stored locally and scoped to the exact
+                            // DNSTT profile. It survives leaving this screen and app restarts.
+                            val resumePrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
+                            val profileKey = listOf(profile.id, profile.serverHost, profile.dnsttServerPublicKey.orEmpty())
+                                .joinToString("|")
+                                .hashCode()
+                                .toUInt()
+                                .toString(16)
+                            val sessionStartKey = "session_started_$profileKey"
+                            var sessionStartedAt = resumePrefs.getLong(sessionStartKey, 0L)
+                            if (sessionStartedAt <= 0L) {
+                                sessionStartedAt = System.currentTimeMillis()
+                                resumePrefs.edit().putLong(sessionStartKey, sessionStartedAt).apply()
+                            }
+                            batchPassed = historyDao.countPassedBatchAttemptsSince(
+                                profile.serverPort, profile.id, profile.serverHost,
+                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
+                            )
+                            batchFailed = historyDao.countFailedBatchAttemptsSince(
+                                profile.serverPort, profile.id, profile.serverHost,
+                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
+                            )
+                            batchCompleted = historyDao.countCompletedBatchAttemptsSince(
+                                profile.serverPort, profile.id, profile.serverHost,
+                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
+                            )
+
                             // Count first, then read and process one Room page at a time.
                             // This avoids holding the complete resolver library in memory.
                             val pageSize = 100
@@ -345,15 +373,26 @@ internal fun E2eVerificationSection(
                                 val pending = mutableListOf<String>()
                                 for (candidate in page) {
                                     val address = candidate.address
-                                    // A previous FULL_PASS for this exact profile is durable evidence and is not retested.
-                                    val alreadyPassed = historyDao.hasFullPassForProfile(
+                                    // Resume skips every finished attempt from this session,
+                                    // regardless of PASS/FAIL. A cancelled in-flight attempt is retried.
+                                    val completedInSession = historyDao.hasCompletedBatchAttemptSince(
+                                        address = address,
+                                        port = profile.serverPort,
+                                        profileId = profile.id,
+                                        serverHost = profile.serverHost,
+                                        publicKey = profile.dnsttServerPublicKey.orEmpty(),
+                                        sessionStartedAt = sessionStartedAt
+                                    )
+                                    val passedBeforeSession = historyDao.hasFullPassForProfile(
                                         address = address,
                                         port = profile.serverPort,
                                         profileId = profile.id,
                                         serverHost = profile.serverHost,
                                         publicKey = profile.dnsttServerPublicKey.orEmpty()
                                     )
-                                    if (alreadyPassed) {
+                                    if (completedInSession) {
+                                        // Counters were restored from the durable E2E history above.
+                                    } else if (passedBeforeSession) {
                                         batchSkipped++
                                         batchCompleted++
                                     } else {
@@ -399,10 +438,11 @@ internal fun E2eVerificationSection(
                                 if (page.size < pageSize) break
                             }
                             status = "BATCH_COMPLETED"
+                            resumePrefs.edit().remove(sessionStartKey).apply()
                             detail = "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped."
                         } catch (cancelled: CancellationException) {
                             status = "BATCH_PAUSED"
-                            detail = "Paused at $batchCompleted/$batchTotal. Verified FULL_PASS results are saved; start again to resume and skip those successes."
+                            detail = "Paused at $batchCompleted/$batchTotal. Completed results are saved; Resume continues with unfinished DNS entries."
                         } catch (failure: Exception) {
                             status = "BATCH_ERROR"
                             detail = failure.message ?: failure.javaClass.simpleName
