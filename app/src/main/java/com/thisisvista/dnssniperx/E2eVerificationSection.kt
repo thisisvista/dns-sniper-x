@@ -308,61 +308,60 @@ internal fun E2eVerificationSection(
                                 TunnelProfileMapper.toEntity(profile, resolverDao.findTunnelProfile(profile.id))
                             )
 
-                            // Read every compatible Working DNS in bounded Room pages; do not cap at 10 or 15.
-                            val candidates = linkedSetOf<String>()
-                            var offset = 0
-                            val pageSize = 500
-                            while (true) {
-                                val page = resolverDao.getSlipNetExportBatch(pageSize, offset)
-                                if (page.isEmpty()) break
-                                page.mapTo(candidates) { it.address }
-                                offset += page.size
-                                if (page.size < pageSize) break
-                            }
-                            val addresses = candidates.toList()
-                            batchTotal = addresses.size
-                            require(addresses.isNotEmpty()) { "No saved Working DNS candidates on UDP/TCP port 53 were found." }
+                            // Count first, then read and process one Room page at a time.
+                            // This avoids holding the complete resolver library in memory.
+                            val pageSize = 100
+                            batchTotal = resolverDao.countSlipNetCompatibleCandidates()
+                            require(batchTotal > 0) { "No saved Working DNS candidates on UDP/TCP port 53 were found." }
 
                             val coordinator = E2eVerificationCoordinator(
                                 historyDao,
                                 mapOf(TunnelProtocol.DNSTT to (DnsttMobileE2eEngine() as SlipNetE2eEngine))
                             )
-                            detail = "Starting sequential FULL HTTP verification for ${addresses.size} DNS resolvers…"
-                            for (address in addresses) {
-                                // A previous FULL_PASS for this exact profile is durable evidence and is not retested.
-                                val alreadyPassed = historyDao.hasFullPassForProfile(
-                                    address = address,
-                                    port = profile.serverPort,
-                                    profileId = profile.id,
-                                    serverHost = profile.serverHost,
-                                    publicKey = profile.dnsttServerPublicKey.orEmpty()
-                                )
-                                if (alreadyPassed) {
-                                    batchSkipped++
+                            detail = "Starting sequential FULL HTTP verification for $batchTotal DNS resolvers…"
+                            var offset = 0
+                            while (true) {
+                                val page = resolverDao.getSlipNetExportBatch(pageSize, offset)
+                                if (page.isEmpty()) break
+                                for (candidate in page) {
+                                    val address = candidate.address
+                                    // A previous FULL_PASS for this exact profile is durable evidence and is not retested.
+                                    val alreadyPassed = historyDao.hasFullPassForProfile(
+                                        address = address,
+                                        port = profile.serverPort,
+                                        profileId = profile.id,
+                                        serverHost = profile.serverHost,
+                                        publicKey = profile.dnsttServerPublicKey.orEmpty()
+                                    )
+                                    if (alreadyPassed) {
+                                        batchSkipped++
+                                        batchCompleted++
+                                        continue
+                                    }
+                                    resolverIp = address
+                                    detail = "Testing ${batchCompleted + 1}/${batchTotal}: $address"
+                                    val result = coordinator.verify(
+                                        resolverAddress = address,
+                                        resolverPort = profile.serverPort,
+                                        profile = profile,
+                                        mode = E2eVerificationMode.FULL,
+                                        network = network,
+                                        timeoutMs = 25_000,
+                                        verificationUrl = "http://www.gstatic.com/generate_204",
+                                        expectedHttpStatusCode = 204,
+                                        onPhase = { phase -> scope.launch { detail = "$address · $phase" } }
+                                    )
                                     batchCompleted++
-                                    continue
+                                    if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
+                                        batchPassed++
+                                    } else {
+                                        batchFailed++
+                                    }
+                                    status = "BATCH_RUNNING"
+                                    yield()
                                 }
-                                resolverIp = address
-                                detail = "Testing ${batchCompleted + 1}/${batchTotal}: $address"
-                                val result = coordinator.verify(
-                                    resolverAddress = address,
-                                    resolverPort = profile.serverPort,
-                                    profile = profile,
-                                    mode = E2eVerificationMode.FULL,
-                                    network = network,
-                                    timeoutMs = 25_000,
-                                    verificationUrl = "http://www.gstatic.com/generate_204",
-                                    expectedHttpStatusCode = 204,
-                                    onPhase = { phase -> scope.launch { detail = "$address · $phase" } }
-                                )
-                                batchCompleted++
-                                if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
-                                    batchPassed++
-                                } else {
-                                    batchFailed++
-                                }
-                                status = "BATCH_RUNNING"
-                                yield()
+                                offset += page.size
+                                if (page.size < pageSize) break
                             }
                             status = "BATCH_COMPLETED"
                             detail = "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped."
