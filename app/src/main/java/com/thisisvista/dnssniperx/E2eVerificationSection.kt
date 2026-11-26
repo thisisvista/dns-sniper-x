@@ -42,9 +42,11 @@ import com.thisisvista.dnssniperx.data.TunnelProtocol
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -330,11 +332,17 @@ internal fun E2eVerificationSection(
                                 historyDao,
                                 mapOf(TunnelProtocol.DNSTT to (DnsttMobileE2eEngine() as SlipNetE2eEngine))
                             )
-                            detail = "Starting sequential FULL HTTP verification for $batchTotal DNS resolvers…"
+                            // Three simultaneous tunnels provide a useful speed-up while
+                            // keeping phone CPU, memory, and remote DNS server load bounded.
+                            // Each page is still fetched from Room in a bounded window.
+                            val concurrency = 3
+                            detail = "Starting FULL HTTP verification for $batchTotal DNS resolvers (up to $concurrency at once)…"
                             var offset = 0
                             while (true) {
                                 val page = resolverDao.getSlipNetExportBatch(pageSize, offset)
                                 if (page.isEmpty()) break
+
+                                val pending = mutableListOf<String>()
                                 for (candidate in page) {
                                     val address = candidate.address
                                     // A previous FULL_PASS for this exact profile is durable evidence and is not retested.
@@ -348,29 +356,44 @@ internal fun E2eVerificationSection(
                                     if (alreadyPassed) {
                                         batchSkipped++
                                         batchCompleted++
-                                        continue
-                                    }
-                                    resolverIp = address
-                                    detail = "Testing ${batchCompleted + 1}/${batchTotal}: $address"
-                                    val result = coordinator.verify(
-                                        resolverAddress = address,
-                                        resolverPort = profile.serverPort,
-                                        profile = profile,
-                                        mode = E2eVerificationMode.FULL,
-                                        network = network,
-                                        timeoutMs = 25_000,
-                                        verificationUrl = "http://www.gstatic.com/generate_204",
-                                        expectedHttpStatusCode = 204,
-                                        onPhase = { phase -> scope.launch { detail = "$address · $phase" } }
-                                    )
-                                    batchCompleted++
-                                    if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
-                                        batchPassed++
                                     } else {
-                                        batchFailed++
+                                        pending.add(address)
                                     }
-                                    status = "BATCH_RUNNING"
-                                    yield()
+                                }
+
+                                // Run small groups concurrently. Child coroutines inherit the UI
+                                // dispatcher for safe progress updates; the engine itself moves
+                                // network work to Dispatchers.IO. Cancellation still stops the
+                                // whole active group and each attempt records its cancellation.
+                                for (group in pending.chunked(concurrency)) {
+                                    resolverIp = group.first()
+                                    detail = "Testing ${batchCompleted + 1}–${batchCompleted + group.size}/$batchTotal (${group.size} in parallel)…"
+                                    coroutineScope {
+                                        group.map { address ->
+                                            async {
+                                                val result = coordinator.verify(
+                                                    resolverAddress = address,
+                                                    resolverPort = profile.serverPort,
+                                                    profile = profile,
+                                                    mode = E2eVerificationMode.FULL,
+                                                    network = network,
+                                                    timeoutMs = 25_000,
+                                                    verificationUrl = "http://www.gstatic.com/generate_204",
+                                                    expectedHttpStatusCode = 204,
+                                                    onPhase = { phase ->
+                                                        scope.launch { detail = "$address · $phase" }
+                                                    }
+                                                )
+                                                batchCompleted++
+                                                if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
+                                                    batchPassed++
+                                                } else {
+                                                    batchFailed++
+                                                }
+                                                status = "BATCH_RUNNING"
+                                            }
+                                        }.awaitAll()
+                                    }
                                 }
                                 offset += page.size
                                 if (page.size < pageSize) break
