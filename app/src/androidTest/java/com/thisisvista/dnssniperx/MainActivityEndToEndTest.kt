@@ -42,8 +42,8 @@ class MainActivityEndToEndTest {
 
     @Test
     fun manualImportDeduplicatesAndPersistsToRoom() {
-        // Manual import now lives on the dedicated Collect & Scan tab.
-        composeRule.onNodeWithText("Collect & Scan").performClick()
+        // Manual import now lives on the dedicated Collect tab.
+        composeRule.onNodeWithText("Collect").performClick()
         val address = "198.51.100.77"
 
         composeRule.onNodeWithText("DNS addresses")
