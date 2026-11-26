@@ -113,6 +113,8 @@ jobs:
             echo "Signing secrets unavailable; building unsigned release APK for CI validation."
           fi
           ./gradlew assembleRelease
+          APK="$GITHUB_WORKSPACE/app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
           echo "Release APK size:"
           du -h app/build/outputs/apk/release/*.apk
 
