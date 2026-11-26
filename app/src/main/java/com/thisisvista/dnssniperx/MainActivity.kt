@@ -662,7 +662,7 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results", "TOOLS" to "Tools").forEach { (key, label) ->
+                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results", "TOOLS" to "Advanced").forEach { (key, label) ->
                     FilterChip(
                         selected = selectedTab == key,
                         onClick = { selectedTab = key },
@@ -783,6 +783,8 @@ private fun HomeContent(
         }
 
         if (selectedTab == "TOOLS") {
+        Text("Advanced diagnostics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Optional encrypted-DNS connectivity tests.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
             "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
