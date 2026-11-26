@@ -1133,9 +1133,6 @@ private fun HomeContent(
 
         }
 
-        if (selectedTab == "E2E") {
-            DnsttProfileSection(dao = dao)
-        }
         if (selectedTab == "SETTINGS") {
             DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
             PrivacyDisclosureSection()
