@@ -95,9 +95,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Build the optimized release candidate separately from the debug APK.
+      # Sign release APKs only when repository signing secrets are configured.
+      # Pull requests without secrets continue to produce an unsigned test build.
       - name: Build optimized release APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/dns-sniperx-release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+            chmod 600 "$ANDROID_KEYSTORE_PATH"
+            echo "Building signed release APK."
+          else
+            echo "Signing secrets unavailable; building unsigned release APK for CI validation."
+          fi
           ./gradlew assembleRelease
           echo "Release APK size:"
           du -h app/build/outputs/apk/release/*.apk
