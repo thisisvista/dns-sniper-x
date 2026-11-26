@@ -262,9 +262,29 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text("DNS SniperX", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("DNS discovery and diagnostics", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("DNS SniperX", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("NETWORK INTELLIGENCE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Card(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                    ) {
+                        Text("DNS", modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Text("Discover · Test · Verify", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     ) { innerPadding ->
@@ -616,9 +636,24 @@ private fun HomeContent(
         modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("HOME" to "Home", "COLLECT" to "Collect & Scan", "E2E" to "E2E", "RESULTS" to "Results", "SETTINGS" to "Settings").forEach { (key, label) ->
-                FilterChip(selected = selectedTab == key, onClick = { selectedTab = key }, label = { Text(label) })
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results", "SETTINGS" to "Settings").forEach { (key, label) ->
+                    FilterChip(
+                        selected = selectedTab == key,
+                        onClick = { selectedTab = key },
+                        label = { Text(label) },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        border = null
+                    )
+                }
             }
         }
         if (selectedTab == "HOME") {
