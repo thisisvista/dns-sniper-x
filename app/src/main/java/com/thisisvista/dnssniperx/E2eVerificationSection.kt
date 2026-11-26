@@ -311,7 +311,19 @@ internal fun E2eVerificationSection(
                             // Count first, then read and process one Room page at a time.
                             // This avoids holding the complete resolver library in memory.
                             val pageSize = 100
-                            batchTotal = resolverDao.countSlipNetCompatibleCandidates()
+                            // Count the exact same paged query used below. This keeps the
+                            // progress denominator aligned with the candidate pages, including
+                            // SQLite's deduplication and endpoint filters, without loading all
+                            // resolver rows into memory.
+                            var countOffset = 0
+                            batchTotal = 0
+                            while (true) {
+                                val countPage = resolverDao.getSlipNetExportBatch(pageSize, countOffset)
+                                if (countPage.isEmpty()) break
+                                batchTotal += countPage.size
+                                countOffset += countPage.size
+                                if (countPage.size < pageSize) break
+                            }
                             require(batchTotal > 0) { "No saved Working DNS candidates on UDP/TCP port 53 were found." }
 
                             val coordinator = E2eVerificationCoordinator(
