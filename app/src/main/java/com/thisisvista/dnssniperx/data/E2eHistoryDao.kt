@@ -65,6 +65,76 @@ interface E2eHistoryDao {
         publicKey: String
     ): Boolean
 
+
+    /** A completed attempt in this batch session; cancelled attempts remain eligible for retry. */
+    @Query("""
+        SELECT EXISTS(
+            SELECT 1 FROM e2e_history
+            WHERE resolverAddress = :address
+              AND resolverPort = :port
+              AND profileId = :profileId
+              AND serverHost = :serverHost
+              AND dnsttServerPublicKey = :publicKey
+              AND tunnelProtocol = 'DNSTT'
+              AND verificationMode = 'FULL'
+              AND testedAt >= :sessionStartedAt
+              AND status != 'CANCELLED'
+        )
+    """)
+    suspend fun hasCompletedBatchAttemptSince(
+        address: String,
+        port: Int,
+        profileId: String,
+        serverHost: String,
+        publicKey: String,
+        sessionStartedAt: Long
+    ): Boolean
+
+    @Query("""
+        SELECT COUNT(DISTINCT resolverAddress) FROM e2e_history
+        WHERE resolverPort = :port
+          AND profileId = :profileId
+          AND serverHost = :serverHost
+          AND dnsttServerPublicKey = :publicKey
+          AND tunnelProtocol = 'DNSTT'
+          AND verificationMode = 'FULL'
+          AND testedAt >= :sessionStartedAt
+          AND status != 'CANCELLED'
+    """)
+    suspend fun countCompletedBatchAttemptsSince(
+        port: Int, profileId: String, serverHost: String, publicKey: String, sessionStartedAt: Long
+    ): Int
+
+    @Query("""
+        SELECT COUNT(DISTINCT resolverAddress) FROM e2e_history
+        WHERE resolverPort = :port
+          AND profileId = :profileId
+          AND serverHost = :serverHost
+          AND dnsttServerPublicKey = :publicKey
+          AND tunnelProtocol = 'DNSTT'
+          AND verificationMode = 'FULL'
+          AND testedAt >= :sessionStartedAt
+          AND status = 'FULL_PASS' AND httpStatusCode = 204
+    """)
+    suspend fun countPassedBatchAttemptsSince(
+        port: Int, profileId: String, serverHost: String, publicKey: String, sessionStartedAt: Long
+    ): Int
+
+    @Query("""
+        SELECT COUNT(DISTINCT resolverAddress) FROM e2e_history
+        WHERE resolverPort = :port
+          AND profileId = :profileId
+          AND serverHost = :serverHost
+          AND dnsttServerPublicKey = :publicKey
+          AND tunnelProtocol = 'DNSTT'
+          AND verificationMode = 'FULL'
+          AND testedAt >= :sessionStartedAt
+          AND status != 'CANCELLED' AND NOT (status = 'FULL_PASS' AND httpStatusCode = 204)
+    """)
+    suspend fun countFailedBatchAttemptsSince(
+        port: Int, profileId: String, serverHost: String, publicKey: String, sessionStartedAt: Long
+    ): Int
+
     /**
      * SlipNet import candidates: latest successful FULL E2E proof per resolver,
      * engine profile and endpoint. Failed later retests do not erase last success.
