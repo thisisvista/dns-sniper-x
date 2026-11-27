@@ -212,7 +212,9 @@ jobs:
           # the emulator's supported TCG software-acceleration fallback.
           ANDROID_I_WANT_MY_TCG: "yes"
         with:
-          api-level: 34
+          # API 35 uses a newer hosted system image; API 34 booted without
+          # registering Android's package manager service on the runner.
+          api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_2
@@ -220,7 +222,24 @@ jobs:
           emulator-boot-timeout: 1200
           disable-linux-hardware-acceleration: true
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest
+          script: |
+            set -e
+            echo "Waiting for Android package manager service…"
+            for attempt in $(seq 1 30); do
+              if adb shell cmd package list packages >/dev/null 2>&1; then
+                echo "Android package manager is ready."
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "Android package manager did not become available."
+                adb shell getprop
+                adb shell service list || true
+                adb logcat -d -b all | tail -n 500 || true
+                exit 1
+              fi
+              sleep 5
+            done
+            ./gradlew connectedDebugAndroidTest
 
       - name: Upload Android instrumentation and E2E reports
         if: always()
