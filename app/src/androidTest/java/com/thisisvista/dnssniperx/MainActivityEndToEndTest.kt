@@ -46,10 +46,10 @@ class MainActivityEndToEndTest {
         composeRule.onNodeWithText("Collect").performClick()
         val address = "198.51.100.77"
 
-        composeRule.onNodeWithText("DNS addresses")
+        composeRule.onNodeWithText("Or paste DNS addresses")
             .performScrollTo()
             .performTextInput(address)
-        composeRule.onNodeWithText("Import to local library")
+        composeRule.onNodeWithText("Add pasted DNS to local library")
             .performScrollTo()
             .performClick()
 
@@ -65,10 +65,10 @@ class MainActivityEndToEndTest {
         }
 
         // Importing the same address again must not create a duplicate.
-        composeRule.onNodeWithText("DNS addresses")
+        composeRule.onNodeWithText("Or paste DNS addresses")
             .performScrollTo()
             .performTextInput(address)
-        composeRule.onNodeWithText("Import to local library")
+        composeRule.onNodeWithText("Add pasted DNS to local library")
             .performScrollTo()
             .performClick()
 
