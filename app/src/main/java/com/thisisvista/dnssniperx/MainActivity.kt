@@ -1,6 +1,8 @@
 package com.thisisvista.dnssniperx
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
@@ -16,6 +18,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,6 +40,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -113,6 +120,7 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
     var isImporting by rememberSaveable { mutableStateOf(false) }
     var importProgress by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var scanProgress by rememberSaveable { mutableStateOf("") }
     var isDohTesting by rememberSaveable { mutableStateOf(false) }
     var dohResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DohProbeResult>()) }
@@ -265,7 +273,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
@@ -286,10 +295,18 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                 }
                 Text("Discover · Test · Verify", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(selected = selectedTab != "SETTINGS", onClick = { selectedTab = "HOME" }, icon = { Text("⌂") }, label = { Text("Home") })
+                NavigationBarItem(selected = selectedTab == "SETTINGS", onClick = { selectedTab = "SETTINGS" }, icon = { Text("⚙") }, label = { Text("Settings") })
+            }
         }
     ) { innerPadding ->
         HomeContent(
             contentPadding = innerPadding,
+            selectedTab = selectedTab,
+            onSelectedTabChange = { selectedTab = it },
             count = count,
             dao = dao,
             e2eHistoryDao = e2eHistoryDao,
@@ -430,25 +447,27 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                                     termsNote = null
                                 )
                             })
-                            // Discover a bounded page of Iran-based provider ASN candidates
-                            // on the existing explicit collection action. Candidates remain
-                            // NOT_TESTED until the user starts the normal DNS scan.
-                            var providerDiscovery: ProviderDiscoveryCoordinator.Summary? = null
-                            var providerDiscoveryError: String? = null
-                            try {
-                                providerDiscovery = ProviderDiscoveryCoordinator(dao).discoverNextBatch(
-                                    providerIds = ProviderPrefixDiscovery.asnSeeds.mapTo(linkedSetOf()) { it.providerId },
-                                    batchSize = IranPrefixDiscovery.DEFAULT_BATCH_SIZE
-                                )
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (exception: Exception) {
-                                providerDiscoveryError = exception.message?.take(160) ?: "Provider discovery unavailable"
-                                AppLogger.record(
-                                    dao, context, "WARN", "provider-discovery",
-                                    "Provider ASN candidate discovery failed", exception,
-                                    stage = "discover"
-                                )
+                            // Keep the Fetch action responsive: provider-range discovery is
+                            // supplemental and must never delay re-enabling the main controls.
+                            scope.launch(Dispatchers.IO) {
+                                val discoveryReport = try {
+                                    val discovery = ProviderDiscoveryCoordinator(dao).discoverNextBatch(
+                                        providerIds = ProviderPrefixDiscovery.asnSeeds.mapTo(linkedSetOf()) { it.providerId },
+                                        batchSize = IranPrefixDiscovery.DEFAULT_BATCH_SIZE
+                                    )
+                                    "Provider discovery: saved ${discovery.newlySaved} candidates; ${discovery.nextOffset}/${discovery.totalCandidates} sampled." +
+                                        if (discovery.complete) " Discovery complete." else " More candidates can be discovered on a later Fetch."
+                                } catch (exception: Exception) {
+                                    AppLogger.record(
+                                        dao, context, "WARN", "provider-discovery",
+                                        "Provider ASN candidate discovery failed", exception,
+                                        stage = "discover"
+                                    )
+                                    "Provider discovery postponed: ${exception.message?.take(120) ?: "temporarily unavailable"}."
+                                }
+                                withContext(Dispatchers.Main) {
+                                    message = message + "\\n" + discoveryReport
+                                }
                             }
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
@@ -459,12 +478,6 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                                 if (failures.isNotEmpty()) append(" ${failures.size} source(s) could not be reached.")
                                 append("\\n").append(sourceReport)
                                 if (summary.found > summary.inserted) append("\\nExisting duplicates or repeated entries were skipped.")
-                                providerDiscovery?.let { discovery ->
-                                    append("\\nProvider discovery: saved ${discovery.newlySaved} new candidates from ${discovery.providerCount} provider seeds; ${discovery.nextOffset}/${discovery.totalCandidates} sampled.")
-                                    if (!discovery.complete) append(" Run collection again to continue this bounded discovery.")
-                                    else append(" Provider candidate discovery is complete.")
-                                }
-                                providerDiscoveryError?.let { append("\\nProvider discovery postponed: $it") }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -544,6 +557,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
 @Composable
 private fun HomeContent(
     contentPadding: PaddingValues,
+    selectedTab: String,
+    onSelectedTabChange: (String) -> Unit,
     count: Int,
     dao: ResolverDao,
     e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao,
@@ -582,7 +597,8 @@ private fun HomeContent(
     onDelete: (Long) -> Unit
 ) {
     var showResetCollectionConfirmation by rememberSaveable { mutableStateOf(false) }
-    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
+    var collectionStartCount by rememberSaveable { mutableStateOf(count) }
+    var hasCollectedInSession by rememberSaveable { mutableStateOf(false) }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
@@ -632,9 +648,18 @@ private fun HomeContent(
             isLoadingResolvers = false
         }
     }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+    val compactLayout = maxWidth < 360.dp
+    val horizontalPadding = when {
+        maxWidth >= 700.dp -> 28.dp
+        compactLayout -> 12.dp
+        else -> 16.dp
+    }
     Column(
-        modifier = Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxSize().widthIn(max = 760.dp).align(androidx.compose.ui.Alignment.TopCenter)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPadding, vertical = if (compactLayout) 8.dp else 12.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 9.dp else 12.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -645,10 +670,10 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results", "SETTINGS" to "Settings").forEach { (key, label) ->
+                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results").forEach { (key, label) ->
                     FilterChip(
                         selected = selectedTab == key,
-                        onClick = { selectedTab = key },
+                        onClick = { onSelectedTabChange(key) },
                         label = { Text(label) },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                         border = null
@@ -669,26 +694,49 @@ private fun HomeContent(
         }
 
         Text("Live overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            listOf(
-                "Saved" to count,
-                "Working" to healthyCount,
-                "UDP pass" to udpPassCount,
-                "TCP pass" to tcpPassCount,
-                "Untested" to untestedCount,
-                "Warnings" to warningCount
-            ).forEach { (label, value) ->
-                Card(
-                    modifier = Modifier.padding(bottom = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val overviewItems = listOf(
+            "Saved" to count,
+            "Working" to healthyCount,
+            "UDP pass" to udpPassCount,
+            "TCP pass" to tcpPassCount,
+            "Untested" to untestedCount,
+            "Warnings" to warningCount
+        )
+        val overviewColumns = if (compactLayout) 2 else 3
+        overviewItems.chunked(overviewColumns).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                rowItems.forEach { (label, value) ->
+                    Card(
+                        modifier = Modifier.weight(1f).padding(bottom = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(
+                                horizontal = if (compactLayout) 10.dp else 14.dp,
+                                vertical = 12.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                value.toString(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
                     }
+                }
+                repeat(overviewColumns - rowItems.size) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -697,13 +745,9 @@ private fun HomeContent(
 
         if (selectedTab == "COLLECT") {
         Text("Discover public DNS lists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Download candidates from the configured public sources. Internet access is required; downloaded addresses are not yet tested.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Choose sources, fetch DNS candidates, then scan them.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Public DNS sources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Choose which reviewed public lists to collect. At least one source must remain selected; the regional list is processed first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Select at least one source. Regional sources run first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ResolverCollector.sources.forEach { source ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Checkbox(
@@ -720,11 +764,32 @@ private fun HomeContent(
                 }
             }
         }
-        Button(onClick = { onCollect(selectedSourceIds.toSet()) }, enabled = !isCollecting && !isImporting && !isScanning && selectedSourceIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { collectionStartCount = count; hasCollectedInSession = true; onCollect(selectedSourceIds.toSet()) },
+            enabled = !isCollecting && !isImporting && !isScanning && selectedSourceIds.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Collecting…")
+                Text("  Fetching · ${maxOf(0, count - collectionStartCount)}")
             } else Text("Fetch public DNS lists")
+        }
+        if (isCollecting || hasCollectedInSession) {
+            Text(
+                if (isCollecting) "${maxOf(0, count - collectionStartCount)} new · $count saved"
+                else "${maxOf(0, count - collectionStartCount)} collected · $count total saved",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Button(
+            onClick = { onScan(false, selectedScanSource) },
+            enabled = count > 0 && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (isScanning) "Pause scan" else "Scan / Resume") }
+        if (scanProgress.isNotBlank()) {
+            Text("Progress: $scanProgress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
         OutlinedButton(
             onClick = { showResetCollectionConfirmation = true },
@@ -750,99 +815,6 @@ private fun HomeContent(
 
         }
 
-        if (selectedTab == "SETTINGS") {
-        Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = onTestDoh,
-            enabled = !isDohTesting && !isDotTesting && !isCollecting && !isImporting && !isScanning,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (isDohTesting) {
-                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Testing DoH providers…")
-            } else Text("Test public DoH providers")
-        }
-        if (dohResults.isNotEmpty()) {
-            dohResults.forEach { result ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(result.provider, fontWeight = FontWeight.SemiBold)
-                        Text("${result.status}${result.latencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
-                        Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        Text("Recent DoH history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Latest 100 DoH checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (dohHistory.isEmpty()) {
-            Text("No DoH history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            dohHistory.take(20).forEach { entry ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(entry.provider, fontWeight = FontWeight.SemiBold)
-                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        Text("DNS-over-TLS (DoT) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Checks DNS-over-TLS on TCP port 853 with platform certificate validation and hostname verification. DoT results are separate from UDP/TCP resolver checks and do not test tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = onTestDot,
-            enabled = !isDotTesting && !isDohTesting && !isCollecting && !isImporting && !isScanning,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (isDotTesting) {
-                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Testing DoT providers…")
-            } else Text("Test public DoT providers")
-        }
-        dotResults.forEach { result ->
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(result.provider + " (" + result.hostname + ")", fontWeight = FontWeight.SemiBold)
-                    Text(result.status + (result.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                    Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        Text("Recent DoT history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Latest 100 DoT checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (dotHistory.isEmpty()) {
-            Text("No DoT history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            dotHistory.take(20).forEach { entry ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(entry.provider + " (" + entry.hostname + ")", fontWeight = FontWeight.SemiBold)
-                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        }
-
         if (selectedTab == "E2E") {
         E2eVerificationSection(
             resolverDao = dao,
@@ -855,22 +827,9 @@ private fun HomeContent(
 
         if (selectedTab == "COLLECT") {
         Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Sends a standard DNS query over UDP and TCP. Untested entries are scanned automatically in small batches of up to 10. Concurrency adapts from 1 to 4 based on device temperature and battery conditions. Completed results are saved so scanning can resume after interruption.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            "Result guide: PASS = valid answer; DNS error = server replied with an error (for example, blocked or nonexistent domain); No answer = valid reply without an address; Truncated = reply was cut short; Timeout = no reply in time; Failed = network or protocol problem.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Checks saved DNS over UDP and TCP in small batches. Progress is saved so you can resume.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Scan source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Choose which untested DNS entries to scan. This selection is kept when you pause and resume.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Choose which untested entries to scan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -884,9 +843,6 @@ private fun HomeContent(
                 )
             }
         }
-        Button(onClick = { onScan(false, selectedScanSource) }, enabled = count > 0 && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            if (isScanning) Text("Pause scan") else Text("Scan / Resume untested DNS (UDP + TCP)")
-        }
         Button(
             onClick = { onScan(true, selectedScanSource) },
             enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
@@ -894,7 +850,6 @@ private fun HomeContent(
         ) {
             Text("Retry unsuccessful / warnings")
         }
-        if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
         }
@@ -1088,6 +1043,8 @@ private fun HomeContent(
         }
 
         if (selectedTab == "SETTINGS") {
+            Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            GitHubUpdateSection()
             DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
             PrivacyDisclosureSection()
             Text(
@@ -1096,6 +1053,58 @@ private fun HomeContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
+        }
+    }
+    }
+}
+
+
+@Composable
+private fun GitHubUpdateSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by rememberSaveable { mutableStateOf("Installed version: ${BuildConfig.VERSION_NAME}") }
+    var releaseUrl by rememberSaveable { mutableStateOf("") }
+    var apkUrl by rememberSaveable { mutableStateOf("") }
+    var checking by rememberSaveable { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("App updates", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = {
+                checking = true
+                status = "Checking GitHub Releases…"
+                scope.launch {
+                    try {
+                        val data = withContext(Dispatchers.IO) {
+                            val c = java.net.URL("https://api.github.com/repos/thisisvista/dns-sniper-x/releases/latest").openConnection() as java.net.HttpURLConnection
+                            try {
+                                c.connectTimeout = 10000
+                                c.readTimeout = 10000
+                                c.setRequestProperty("User-Agent", "DNS-SniperX-Android")
+                                val j = org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+                                val assets = j.optJSONArray("assets")
+                                var apk = ""
+                                if (assets != null) for (i in 0 until assets.length()) {
+                                    val asset = assets.optJSONObject(i) ?: continue
+                                    if (asset.optString("name").endsWith(".apk", true)) { apk = asset.optString("browser_download_url"); break }
+                                }
+                                Triple(j.optString("tag_name"), j.optString("html_url"), apk)
+                            } finally { c.disconnect() }
+                        }
+                        releaseUrl = data.second
+                        apkUrl = data.third
+                        status = if (data.first.trimStart('v') == BuildConfig.VERSION_NAME.trimStart('v')) "Latest version installed (${data.first})."
+                            else "Latest: ${data.first} · Installed: ${BuildConfig.VERSION_NAME}"
+                    } catch (e: Exception) {
+                        status = "Update check failed. Check your connection and retry."
+                    } finally { checking = false }
+                }
+            }, enabled = !checking, modifier = Modifier.fillMaxWidth()) {
+                if (checking) CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp) else Text("Check for updates")
+            }
+            if (releaseUrl.isNotBlank()) OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }, modifier = Modifier.fillMaxWidth()) { Text("Open GitHub release") }
+            if (apkUrl.isNotBlank()) Button(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))) }, modifier = Modifier.fillMaxWidth()) { Text("Download APK") }
         }
     }
 }

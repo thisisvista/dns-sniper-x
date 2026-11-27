@@ -10,16 +10,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 private val SniperDark = darkColorScheme(
-    primary = Color(0xFF35E6D0),
-    onPrimary = Color(0xFF00201C),
-    primaryContainer = Color(0xFF103B39),
-    onPrimaryContainer = Color(0xFFB5FFF4),
-    secondary = Color(0xFF9AB9FF),
-    onSecondary = Color(0xFF102D60),
-    secondaryContainer = Color(0xFF243B68),
-    onSecondaryContainer = Color(0xFFDCE5FF),
-    tertiary = Color(0xFFFFC477),
-    onTertiary = Color(0xFF452B00),
+    primary = Color(0xFFC6AEFF),
+    onPrimary = Color(0xFF28164B),
+    primaryContainer = Color(0xFF38265B),
+    onPrimaryContainer = Color(0xFFEBDDFF),
+    secondary = Color(0xFFD0C2F5),
+    onSecondary = Color(0xFF30234C),
+    secondaryContainer = Color(0xFF40345E),
+    onSecondaryContainer = Color(0xFFE8DEFF),
+    tertiary = Color(0xFFE2B9D2),
+    onTertiary = Color(0xFF44263B),
     background = Color(0xFF090F16),
     onBackground = Color(0xFFE6EDF5),
     surface = Color(0xFF0D151E),
@@ -38,11 +38,11 @@ private val SniperDark = darkColorScheme(
 )
 
 private val SniperLight = lightColorScheme(
-    primary = Color(0xFF006B62),
+    primary = Color(0xFF7652B5),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB5FFF4),
-    onPrimaryContainer = Color(0xFF00201C),
-    secondary = Color(0xFF405A91),
+    primaryContainer = Color(0xFFE9DDFF),
+    onPrimaryContainer = Color(0xFF28164B),
+    secondary = Color(0xFF66558A),
     onSecondary = Color.White,
     background = Color(0xFFF5F8FA),
     onBackground = Color(0xFF17212B),
