@@ -251,7 +251,6 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                             importProgress = "Processed $processedLines lines; saved $inserted new DNS entries…"
                         }
                     }
-                    val skipped = validCount - inserted
                     val skipped = (validCount - inserted).coerceAtLeast(0)
                     importSummary = "Parsed $validCount · Added $inserted · Duplicates skipped $skipped"
                     message = when {
@@ -904,7 +903,6 @@ private fun HomeContent(
         Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Add pasted DNS to local library")
         }
-        Divider(modifier = Modifier.fillMaxWidth(), thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
         Text("Manual scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("$manualResolverCount manual DNS entries in your library", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
