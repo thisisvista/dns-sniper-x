@@ -40,6 +40,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -118,6 +120,7 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
     var isImporting by rememberSaveable { mutableStateOf(false) }
     var importProgress by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var scanProgress by rememberSaveable { mutableStateOf("") }
     var isDohTesting by rememberSaveable { mutableStateOf(false) }
     var dohResults by androidx.compose.runtime.remember { mutableStateOf(emptyList<DohProbeResult>()) }
@@ -292,10 +295,18 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                 }
                 Text("Discover · Test · Verify", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(selected = selectedTab != "SETTINGS", onClick = { selectedTab = "HOME" }, icon = { Text("⌂") }, label = { Text("Home") })
+                NavigationBarItem(selected = selectedTab == "SETTINGS", onClick = { selectedTab = "SETTINGS" }, icon = { Text("⚙") }, label = { Text("Settings") })
+            }
         }
     ) { innerPadding ->
         HomeContent(
             contentPadding = innerPadding,
+            selectedTab = selectedTab,
+            onSelectedTabChange = { selectedTab = it },
             count = count,
             dao = dao,
             e2eHistoryDao = e2eHistoryDao,
@@ -546,6 +557,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
 @Composable
 private fun HomeContent(
     contentPadding: PaddingValues,
+    selectedTab: String,
+    onSelectedTabChange: (String) -> Unit,
     count: Int,
     dao: ResolverDao,
     e2eHistoryDao: com.thisisvista.dnssniperx.data.E2eHistoryDao,
@@ -586,7 +599,6 @@ private fun HomeContent(
     var showResetCollectionConfirmation by rememberSaveable { mutableStateOf(false) }
     var collectionStartCount by rememberSaveable { mutableStateOf(count) }
     var hasCollectedInSession by rememberSaveable { mutableStateOf(false) }
-    var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var selectedFilter by rememberSaveable { mutableStateOf("ALL") }
     var selectedScanSource by rememberSaveable { mutableStateOf("ALL") }
     var selectedNetworkType by rememberSaveable { mutableStateOf("ALL") }
@@ -661,7 +673,7 @@ private fun HomeContent(
                 listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results").forEach { (key, label) ->
                     FilterChip(
                         selected = selectedTab == key,
-                        onClick = { selectedTab = key },
+                        onClick = { onSelectedTabChange(key) },
                         label = { Text(label) },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                         border = null
@@ -1041,22 +1053,6 @@ private fun HomeContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
-        }
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                TextButton(onClick = { selectedTab = "HOME" }) {
-                    Text(if (selectedTab != "SETTINGS") "⌂  Home" else "Home")
-                }
-                TextButton(onClick = { selectedTab = "SETTINGS" }) {
-                    Text(if (selectedTab == "SETTINGS") "⚙  Settings" else "Settings")
-                }
-            }
         }
     }
     }
