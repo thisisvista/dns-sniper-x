@@ -50,6 +50,26 @@ interface ResolverDao {
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeCount(): Flow<Int>
 
+    /** Bounded manual-only result list for the Manual workspace. */
+    @Query("""
+        SELECT * FROM resolvers
+        WHERE source IN ('manual', 'txt-import')
+           OR additionalSources LIKE '%manual%'
+           OR additionalSources LIKE '%txt-import%'
+        ORDER BY collectedAt DESC, id DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getManualResolverPage(limit: Int, offset: Int): List<ResolverEntity>
+
+    @Query("""
+        SELECT COUNT(*) FROM resolvers
+        WHERE source IN ('manual', 'txt-import')
+           OR additionalSources LIKE '%manual%'
+           OR additionalSources LIKE '%txt-import%'
+    """)
+    suspend fun countManualResolvers(): Int
+
+
     /** Emits whenever any resolver row is inserted, deleted, or updated. */
     @Query("SELECT COUNT(*) FROM resolvers")
     fun observeResolverInvalidation(): Flow<Int>
