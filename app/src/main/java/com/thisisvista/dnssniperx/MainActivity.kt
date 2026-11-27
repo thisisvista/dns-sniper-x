@@ -3,6 +3,7 @@ package com.thisisvista.dnssniperx
 import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
@@ -119,6 +120,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
     var selectedSourceIds by rememberSaveable { mutableStateOf(ResolverCollector.sources.map { it.id }) }
     var isImporting by rememberSaveable { mutableStateOf(false) }
     var importProgress by rememberSaveable { mutableStateOf("") }
+    var importedFileName by rememberSaveable { mutableStateOf("") }
+    var importSummary by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var scanProgress by rememberSaveable { mutableStateOf("") }
@@ -225,6 +228,11 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
         if (uri != null) {
             scope.launch {
                 isImporting = true
+                importedFileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Selected TXT file"
+                importSummary = ""
                 var validCount = 0
                 var inserted = 0
                 var processedLines = 0
@@ -244,6 +252,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                         }
                     }
                     val skipped = validCount - inserted
+                    val skipped = (validCount - inserted).coerceAtLeast(0)
+                    importSummary = "Parsed $validCount · Added $inserted · Already saved $skipped"
                     message = when {
                         validCount == 0 -> "No valid DNS entries found in the TXT file."
                         inserted == 0 -> "The file contained $validCount valid entries, but all were already saved."
@@ -251,9 +261,11 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                         else -> "Imported $inserted DNS entries from TXT successfully."
                     }
                 } catch (cancelled: CancellationException) {
+                    importSummary = "Import cancelled. Completed batches remain saved in your library."
                     message = "TXT import cancelled. Entries saved from completed batches remain in your library."
                     throw cancelled
                 } catch (exception: Exception) {
+                    importSummary = "Import stopped: ${exception.message ?: "Could not read file"}. Completed batches remain saved."
                     AppLogger.record(dao, context, "ERROR", "import", "TXT import failed", exception, stage = "read-and-parse")
                     message = "TXT import failed: ${exception.message ?: "Could not read file"}. Entries saved from completed batches remain in your library."
                 } finally {
@@ -336,6 +348,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
             },
             isImporting = isImporting,
             importProgress = importProgress,
+            importedFileName = importedFileName,
+            importSummary = importSummary,
             isScanning = isScanning,
             scanProgress = scanProgress,
             isDohTesting = isDohTesting,
@@ -577,6 +591,8 @@ private fun HomeContent(
     onResetCollectionProgress: () -> Unit,
     isImporting: Boolean,
     importProgress: String,
+    importedFileName: String,
+    importSummary: String,
     isScanning: Boolean,
     scanProgress: String,
     isDohTesting: Boolean,
@@ -855,30 +871,46 @@ private fun HomeContent(
         }
 
         if (selectedTab == "COLLECT") {
-        Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Manual DNS workspace", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Choose a TXT file or paste DNS addresses, scan only manual entries, and export results here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("TXT import is streamed in small batches and saved to the local library. Scan results update these saved entries and remain on this device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = onImportFile, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            Text("Choose TXT file")
+            Text(if (isImporting) "Importing TXT…" else "Choose TXT file")
         }
+        if (importedFileName.isNotBlank()) Text("Selected file: $importedFileName", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         if (isImporting && importProgress.isNotBlank()) {
             Text(importProgress, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
         }
+        if (importSummary.isNotBlank()) Text(importSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         OutlinedTextField(
             value = importText,
             onValueChange = onImportTextChange,
             enabled = !isImporting,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            label = { Text("DNS addresses") },
+            minLines = 3,
+            label = { Text("Or paste DNS addresses") },
             placeholder = { Text("1.1.1.1\n8.8.8.8:53\n[2001:db8::1]:53") }
         )
         Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            Text("Import to local library")
+            Text("Add pasted DNS to local library")
         }
+        Divider(modifier = Modifier.fillMaxWidth(), thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        Text("Manual scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Button(
+            onClick = { onScan(false, "MANUAL") },
+            enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (isScanning) "Pause scan" else "Scan / Resume manual DNS") }
+        if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        OutlinedButton(
+            onClick = { onScan(true, "MANUAL") },
+            enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Retry manual failures / warnings") }
+        Text("Results are saved in the Results tab. Export actions below include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export working DNS as TXT") }
+        OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export SlipNet-compatible DNS") }
 
         }
 
