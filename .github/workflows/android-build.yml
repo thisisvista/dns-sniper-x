@@ -222,24 +222,7 @@ jobs:
           emulator-boot-timeout: 1200
           disable-linux-hardware-acceleration: true
           disable-animations: true
-          script: |
-            set -e
-            echo "Waiting for Android package manager service…"
-            for attempt in $(seq 1 30); do
-              if adb shell cmd package list packages >/dev/null 2>&1; then
-                echo "Android package manager is ready."
-                break
-              fi
-              if [ "$attempt" -eq 30 ]; then
-                echo "Android package manager did not become available."
-                adb shell getprop
-                adb shell service list || true
-                adb logcat -d -b all | tail -n 500 || true
-                exit 1
-              fi
-              sleep 5
-            done
-            ./gradlew connectedDebugAndroidTest
+          script: adb shell cmd package list packages >/dev/null && ./gradlew connectedDebugAndroidTest
 
       - name: Upload Android instrumentation and E2E reports
         if: always()
