@@ -922,6 +922,9 @@ private fun HomeContent(
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (isScanning) "Pause scan" else "Scan / Resume manual DNS") }
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        Text("Export actions include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export working DNS as TXT") }
+        OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export SlipNet-compatible DNS") }
         OutlinedButton(
             onClick = { onScan(true, "MANUAL") },
             enabled = manualResolverCount > 0 && !isScanning && !isCollecting && !isImporting,
@@ -939,9 +942,6 @@ private fun HomeContent(
             }
             if (manualResolverCount > manualResolvers.size) Text("Showing ${manualResolvers.size} of $manualResolverCount manual entries. Full list is in Results.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Export actions below include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export working DNS as TXT") }
-        OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export SlipNet-compatible DNS") }
 
         }
 
