@@ -523,11 +523,13 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                     }
                 } catch (exception: Exception) {
                     message = "Could not start DNS scan: ${exception.message ?: exception.javaClass.simpleName}"
-                    AppLogger.record(
-                        dao, context, "ERROR", "scan-service",
-                        "Could not start DNS scan service", exception,
-                        stage = "start"
-                    )
+                    scope.launch {
+                        AppLogger.record(
+                            dao, context, "ERROR", "scan-service",
+                            "Could not start DNS scan service", exception,
+                            stage = "start"
+                        )
+                    }
                 }
             },
             onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
