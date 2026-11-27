@@ -662,7 +662,7 @@ private fun HomeContent(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results", "TOOLS" to "Advanced").forEach { (key, label) ->
+                listOf("HOME" to "Home", "COLLECT" to "Collect", "E2E" to "E2E", "RESULTS" to "Results").forEach { (key, label) ->
                     FilterChip(
                         selected = selectedTab == key,
                         onClick = { selectedTab = key },
@@ -671,7 +671,6 @@ private fun HomeContent(
                         border = null
                     )
                 }
-                TextButton(onClick = { selectedTab = "SETTINGS" }) { Text("⚙") }
             }
         }
         if (selectedTab == "HOME") {
@@ -781,6 +780,9 @@ private fun HomeContent(
             enabled = count > 0 && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (isScanning) "Pause scan" else "Scan / Resume") }
+        if (scanProgress.isNotBlank()) {
+            Text("Progress: $scanProgress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
         OutlinedButton(
             onClick = { showResetCollectionConfirmation = true },
             enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting,
@@ -801,101 +803,6 @@ private fun HomeContent(
                     TextButton(onClick = { showResetCollectionConfirmation = false }) { Text("Cancel") }
                 }
             )
-        }
-
-        }
-
-        if (selectedTab == "TOOLS") {
-        Text("Advanced diagnostics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Optional encrypted-DNS connectivity tests.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("DNS-over-HTTPS (DoH) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Checks a small built-in set of public DoH services over HTTPS using the RFC 8484 DNS message format. These results are separate from the UDP/TCP resolver list and do not test tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = onTestDoh,
-            enabled = !isDohTesting && !isDotTesting && !isCollecting && !isImporting && !isScanning,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (isDohTesting) {
-                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Testing DoH providers…")
-            } else Text("Test public DoH providers")
-        }
-        if (dohResults.isNotEmpty()) {
-            dohResults.forEach { result ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(result.provider, fontWeight = FontWeight.SemiBold)
-                        Text("${result.status}${result.latencyMs?.let { " • ${it} ms" } ?: ""}", style = MaterialTheme.typography.bodySmall)
-                        Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        Text("Recent DoH history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Latest 100 DoH checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (dohHistory.isEmpty()) {
-            Text("No DoH history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            dohHistory.take(20).forEach { entry ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(entry.provider, fontWeight = FontWeight.SemiBold)
-                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        Text("DNS-over-TLS (DoT) diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Checks DNS-over-TLS on TCP port 853 with platform certificate validation and hostname verification. DoT results are separate from UDP/TCP resolver checks and do not test tunnel compatibility.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = onTestDot,
-            enabled = !isDotTesting && !isDohTesting && !isCollecting && !isImporting && !isScanning,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (isDotTesting) {
-                CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
-                Text("  Testing DoT providers…")
-            } else Text("Test public DoT providers")
-        }
-        dotResults.forEach { result ->
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(result.provider + " (" + result.hostname + ")", fontWeight = FontWeight.SemiBold)
-                    Text(result.status + (result.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                    Text(result.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        Text("Recent DoT history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Latest 100 DoT checks are saved locally and remain available after closing the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (dotHistory.isEmpty()) {
-            Text("No DoT history yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            dotHistory.take(20).forEach { entry ->
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(entry.provider + " (" + entry.hostname + ")", fontWeight = FontWeight.SemiBold)
-                        Text(entry.status + (entry.latencyMs?.let { " • " + it + " ms" } ?: ""), style = MaterialTheme.typography.bodySmall)
-                        Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(entry.testedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
         }
 
         }
@@ -935,7 +842,6 @@ private fun HomeContent(
         ) {
             Text("Retry unsuccessful / warnings")
         }
-        if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall)
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
         }
@@ -1129,7 +1035,6 @@ private fun HomeContent(
         }
 
         if (selectedTab == "SETTINGS") {
-            TextButton(onClick = { selectedTab = "HOME" }) { Text("← Back") }
             Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             GitHubUpdateSection()
             DiagnosticsLogsSection(dao = dao, onExport = onExportLogs, onClear = onClearLogs)
@@ -1140,6 +1045,22 @@ private fun HomeContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                TextButton(onClick = { selectedTab = "HOME" }) {
+                    Text(if (selectedTab != "SETTINGS") "⌂  Home" else "Home")
+                }
+                TextButton(onClick = { selectedTab = "SETTINGS" }) {
+                    Text(if (selectedTab == "SETTINGS") "⚙  Settings" else "Settings")
+                }
+            }
         }
     }
     }
