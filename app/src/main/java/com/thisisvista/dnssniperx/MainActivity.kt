@@ -436,25 +436,27 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                                     termsNote = null
                                 )
                             })
-                            // Discover a bounded page of Iran-based provider ASN candidates
-                            // on the existing explicit collection action. Candidates remain
-                            // NOT_TESTED until the user starts the normal DNS scan.
-                            var providerDiscovery: ProviderDiscoveryCoordinator.Summary? = null
-                            var providerDiscoveryError: String? = null
-                            try {
-                                providerDiscovery = ProviderDiscoveryCoordinator(dao).discoverNextBatch(
-                                    providerIds = ProviderPrefixDiscovery.asnSeeds.mapTo(linkedSetOf()) { it.providerId },
-                                    batchSize = IranPrefixDiscovery.DEFAULT_BATCH_SIZE
-                                )
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (exception: Exception) {
-                                providerDiscoveryError = exception.message?.take(160) ?: "Provider discovery unavailable"
-                                AppLogger.record(
-                                    dao, context, "WARN", "provider-discovery",
-                                    "Provider ASN candidate discovery failed", exception,
-                                    stage = "discover"
-                                )
+                            // Keep the Fetch action responsive: provider-range discovery is
+                            // supplemental and must never delay re-enabling the main controls.
+                            scope.launch(Dispatchers.IO) {
+                                val discoveryReport = try {
+                                    val discovery = ProviderDiscoveryCoordinator(dao).discoverNextBatch(
+                                        providerIds = ProviderPrefixDiscovery.asnSeeds.mapTo(linkedSetOf()) { it.providerId },
+                                        batchSize = IranPrefixDiscovery.DEFAULT_BATCH_SIZE
+                                    )
+                                    "Provider discovery: saved ${discovery.newlySaved} candidates; ${discovery.nextOffset}/${discovery.totalCandidates} sampled." +
+                                        if (discovery.complete) " Discovery complete." else " More candidates can be discovered on a later Fetch."
+                                } catch (exception: Exception) {
+                                    AppLogger.record(
+                                        dao, context, "WARN", "provider-discovery",
+                                        "Provider ASN candidate discovery failed", exception,
+                                        stage = "discover"
+                                    )
+                                    "Provider discovery postponed: ${exception.message?.take(120) ?: "temporarily unavailable"}."
+                                }
+                                withContext(Dispatchers.Main) {
+                                    message = message + "\\n" + discoveryReport
+                                }
                             }
                             val failures = summary.results.filter { it.error != null }
                             val sourceReport = summary.results.joinToString { result ->
@@ -465,12 +467,6 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                                 if (failures.isNotEmpty()) append(" ${failures.size} source(s) could not be reached.")
                                 append("\\n").append(sourceReport)
                                 if (summary.found > summary.inserted) append("\\nExisting duplicates or repeated entries were skipped.")
-                                providerDiscovery?.let { discovery ->
-                                    append("\\nProvider discovery: saved ${discovery.newlySaved} new candidates from ${discovery.providerCount} provider seeds; ${discovery.nextOffset}/${discovery.totalCandidates} sampled.")
-                                    if (!discovery.complete) append(" Run collection again to continue this bounded discovery.")
-                                    else append(" Provider candidate discovery is complete.")
-                                }
-                                providerDiscoveryError?.let { append("\\nProvider discovery postponed: $it") }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
