@@ -687,26 +687,49 @@ private fun HomeContent(
         }
 
         Text("Live overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            listOf(
-                "Saved" to count,
-                "Working" to healthyCount,
-                "UDP pass" to udpPassCount,
-                "TCP pass" to tcpPassCount,
-                "Untested" to untestedCount,
-                "Warnings" to warningCount
-            ).forEach { (label, value) ->
-                Card(
-                    modifier = Modifier.padding(bottom = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                        Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val overviewItems = listOf(
+            "Saved" to count,
+            "Working" to healthyCount,
+            "UDP pass" to udpPassCount,
+            "TCP pass" to tcpPassCount,
+            "Untested" to untestedCount,
+            "Warnings" to warningCount
+        )
+        val overviewColumns = if (compactLayout) 2 else 3
+        overviewItems.chunked(overviewColumns).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                rowItems.forEach { (label, value) ->
+                    Card(
+                        modifier = Modifier.weight(1f).padding(bottom = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(
+                                horizontal = if (compactLayout) 10.dp else 14.dp,
+                                vertical = 12.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                value.toString(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
                     }
+                }
+                repeat(overviewColumns - rowItems.size) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
