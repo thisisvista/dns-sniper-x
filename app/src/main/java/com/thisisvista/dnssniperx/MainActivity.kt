@@ -504,19 +504,30 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                 }
             },
             onScan = { retryUnsuccessful, sourceFilter ->
-                val scanIntent = android.content.Intent(context, com.thisisvista.dnssniperx.data.DnsScanForegroundService::class.java)
-                if (isScanning) {
-                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_STOP
-                    context.startService(scanIntent)
-                } else {
-                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_START
-                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_RETRY_UNSUCCESSFUL, retryUnsuccessful)
-                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_SOURCE_FILTER, sourceFilter)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(scanIntent)
-                    } else {
+                val scanIntent = Intent(context, com.thisisvista.dnssniperx.data.DnsScanForegroundService::class.java)
+                try {
+                    if (isScanning) {
+                        scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_STOP
                         context.startService(scanIntent)
+                        message = "Stopping DNS scan…"
+                    } else {
+                        scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_START
+                        scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_RETRY_UNSUCCESSFUL, retryUnsuccessful)
+                        scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_SOURCE_FILTER, sourceFilter)
+                        message = "Starting scan…"
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.startForegroundService(scanIntent)
+                        } else {
+                            context.startService(scanIntent)
+                        }
                     }
+                } catch (exception: Exception) {
+                    message = "Could not start DNS scan: ${exception.message ?: exception.javaClass.simpleName}"
+                    AppLogger.record(
+                        dao, context, "ERROR", "scan-service",
+                        "Could not start DNS scan service", exception,
+                        stage = "start"
+                    )
                 }
             },
             onImportFile = { txtFilePicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
