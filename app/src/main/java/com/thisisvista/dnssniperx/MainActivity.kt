@@ -631,8 +631,17 @@ private fun HomeContent(
     var untestedCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     var warningCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     var isLoadingResolvers by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var manualResolvers by androidx.compose.runtime.remember { mutableStateOf(emptyList<ResolverEntity>()) }
+    var manualResolverCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     val pageSize = 100
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(selectedTab, resolverRefreshToken) {
+        if (selectedTab == "COLLECT") {
+            manualResolverCount = dao.countManualResolvers()
+            manualResolvers = dao.getManualResolverPage(limit = 8, offset = 0)
+        }
+    }
 
     LaunchedEffect(selectedTab, selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
         isLoadingResolvers = true
@@ -897,18 +906,31 @@ private fun HomeContent(
         }
         Divider(modifier = Modifier.fillMaxWidth(), thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
         Text("Manual scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("$manualResolverCount manual DNS entries in your library", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
             onClick = { onScan(false, "MANUAL") },
-            enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
+            enabled = manualResolverCount > 0 && !isScanning && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (isScanning) "Pause scan" else "Scan / Resume manual DNS") }
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         OutlinedButton(
             onClick = { onScan(true, "MANUAL") },
-            enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
+            enabled = manualResolverCount > 0 && !isScanning && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) { Text("Retry manual failures / warnings") }
-        Text("Results are saved in the Results tab. Export actions below include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Manual results", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        if (manualResolvers.isEmpty()) {
+            Text("No manual DNS entries yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            manualResolvers.forEach { resolver ->
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(formatResolverEndpoint(resolver.address, resolver.port), fontWeight = FontWeight.SemiBold)
+                    Text("UDP: ${friendlyProbeStatus(resolver.udpStatus)} · TCP: ${friendlyProbeStatus(resolver.tcpStatus)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (manualResolverCount > manualResolvers.size) Text("Showing ${manualResolvers.size} of $manualResolverCount manual entries. Full list is in Results.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("Export actions below include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedButton(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export working DNS as TXT") }
         OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export SlipNet-compatible DNS") }
 
