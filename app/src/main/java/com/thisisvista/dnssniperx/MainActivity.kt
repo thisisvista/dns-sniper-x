@@ -253,7 +253,7 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                     }
                     val skipped = validCount - inserted
                     val skipped = (validCount - inserted).coerceAtLeast(0)
-                    importSummary = "Parsed $validCount · Added $inserted · Already saved $skipped"
+                    importSummary = "Parsed $validCount · Added $inserted · Duplicates skipped $skipped"
                     message = when {
                         validCount == 0 -> "No valid DNS entries found in the TXT file."
                         inserted == 0 -> "The file contained $validCount valid entries, but all were already saved."
@@ -909,7 +909,7 @@ private fun HomeContent(
         Text("$manualResolverCount manual DNS entries in your library", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
             onClick = { onScan(false, "MANUAL") },
-            enabled = manualResolverCount > 0 && !isScanning && !isCollecting && !isImporting,
+            enabled = manualResolverCount > 0 && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (isScanning) "Pause scan" else "Scan / Resume manual DNS") }
         if (scanProgress.isNotBlank()) Text("Progress: $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
