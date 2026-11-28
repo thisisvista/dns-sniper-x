@@ -63,7 +63,7 @@ class DnsScanForegroundService : Service() {
                 if (job != null) {
                     job.cancel()
                 } else {
-                    publishState(false, state.getString("progress", "") ?: "", "Scan stopped.")
+                    publishState(false, state.getString("progress", "") ?: "", "Scan paused. Completed results are saved; resume to continue.")
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf(startId)
                 }
@@ -222,7 +222,7 @@ class DnsScanForegroundService : Service() {
                     publishState(false, "$completed / $total", "Scan complete: $completed DNS entries tested and saved.")
                 }
             } catch (cancelled: CancellationException) {
-                publishState(false, "$completed / $total", "Scan stopped. Completed results were saved; you can resume the remaining DNS entries.")
+                publishState(false, "$completed / $total", "Scan paused. Completed results are saved; resume to continue with the remaining DNS entries.")
                 throw cancelled
             } catch (exception: Exception) {
                 publishState(false, "$completed / $total", "Scan stopped: ${exception.message ?: "Unknown error"}. Completed results remain saved; you can retry.")
