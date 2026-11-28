@@ -115,6 +115,7 @@ class E2eBatchForegroundService : Service() {
                 dnsttServerPublicKey = prefs.getString("public_key", "").orEmpty()
             )
             require(profile.validate().isEmpty()) { profile.validate().joinToString("; ") }
+            dao.saveTunnelProfile(TunnelProfileMapper.toEntity(profile, dao.findTunnelProfile(profile.id)))
 
             val source = prefs.getString("source", "COLLECT") ?: "COLLECT"
             val devicePrefs = getSharedPreferences("e2e_device_dns", Context.MODE_PRIVATE)
