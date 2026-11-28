@@ -55,7 +55,10 @@ class DnsScanForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                state.edit().putString("message", "Stopping scan…").apply()
+                state.edit()
+                    .putBoolean("paused", true)
+                    .putString("message", "Pausing scan…")
+                    .apply()
                 val job = scanJob
                 if (job != null) {
                     job.cancel()
@@ -68,11 +71,15 @@ class DnsScanForegroundService : Service() {
             }
 
             ACTION_START -> {
-                val retry = intent.getBooleanExtra(EXTRA_RETRY_UNSUCCESSFUL, false)
-                val filter = intent.getStringExtra(EXTRA_SOURCE_FILTER) ?: "ALL"
+                val resumePrevious = state.getBoolean("paused", false)
+                val retry = if (resumePrevious) state.getBoolean("retry", false)
+                    else intent.getBooleanExtra(EXTRA_RETRY_UNSUCCESSFUL, false)
+                val filter = if (resumePrevious) state.getString("source_filter", "ALL") ?: "ALL"
+                    else intent.getStringExtra(EXTRA_SOURCE_FILTER) ?: "ALL"
                 state.edit()
                     .putBoolean("retry", retry)
                     .putString("source_filter", filter)
+                    .putBoolean("paused", false)
                     .apply()
                 if (scanJob?.isActive != true) {
                     startAsForeground()
@@ -146,6 +153,7 @@ class DnsScanForegroundService : Service() {
 
                     if (ScanResourcePolicy.shouldPauseForThermal(thermalStatus)) {
                         pausedForThermal = true
+                        state.edit().putBoolean("paused", true).apply()
                         publishState(
                             false,
                             "$completed / $total",
@@ -288,7 +296,7 @@ class DnsScanForegroundService : Service() {
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .addAction(
-                Notification.Action.Builder(null, "Stop", stopPendingIntent).build()
+                Notification.Action.Builder(null, "Pause", stopPendingIntent).build()
             )
             .build()
     }
