@@ -23,6 +23,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
@@ -49,6 +51,7 @@ class E2eBatchForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var batchJob: kotlinx.coroutines.Job? = null
+    private var heartbeatJob: kotlinx.coroutines.Job? = null
     private val prefs by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     private val notifications by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
 
@@ -78,6 +81,13 @@ class E2eBatchForegroundService : Service() {
                 }
                 if (batchJob?.isActive != true) {
                     startAsForeground()
+                    heartbeatJob?.cancel()
+                    heartbeatJob = serviceScope.launch {
+                        while (isActive) {
+                            prefs.edit().putLong("ui_batch_heartbeat", System.currentTimeMillis()).apply()
+                            delay(5_000)
+                        }
+                    }
                     batchJob = serviceScope.launch { runBatch() }
                 }
                 return START_STICKY
@@ -250,6 +260,8 @@ class E2eBatchForegroundService : Service() {
         } finally {
             monitor.stop()
             if (wakeLock.isHeld) wakeLock.release()
+            heartbeatJob?.cancel()
+            heartbeatJob = null
             batchJob = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
