@@ -863,15 +863,13 @@ private fun HomeContent(
 
         }
 
-        if (selectedTab == "E2E") {
         E2eVerificationSection(
             resolverDao = dao,
             historyDao = e2eHistoryDao,
             network = activeNetwork,
-            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting
+            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting,
+            visible = selectedTab == "E2E"
         )
-
-        }
 
         if (selectedTab == "COLLECT") {
         Text("Scan source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
