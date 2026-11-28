@@ -823,7 +823,7 @@ private fun HomeContent(
             enabled = count > 0 && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (isScanning) "Pause Scan" else if (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true)) "Resume Scan" else "Scan DNS (TCP, UDP)") }
-        if (isScanning || scanProgress.isNotBlank()) {
+        if (isScanning || (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true))) {
             val scanParts = scanProgress.split("/")
             val scanDone = scanParts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
             val scanTotal = scanParts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
@@ -834,10 +834,7 @@ private fun HomeContent(
             )
             if (isScanning) {
                 Text("Scanning", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                Text("Batch / Scanning DNS: $message", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { onScan(false, selectedScanSource) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Pause Scan")
-                }
+                Text("Batch · Scanning DNS: $message", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Text("Paused · $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
