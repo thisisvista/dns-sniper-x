@@ -405,11 +405,19 @@ internal fun E2eVerificationSection(
                             // The session start is stored locally and scoped to the exact
                             // DNSTT profile. It survives leaving this screen and app restarts.
                             val resumePrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
-                            val profileKey = listOf(profile.id, profile.serverHost, profile.dnsttServerPublicKey.orEmpty(), dnsSource, if (dnsSource == "DEVICE") deviceDnsCandidates.joinToString("|").hashCode().toString() else "saved")
-                                .joinToString("|")
-                                .hashCode()
-                                .toUInt()
-                                .toString(16)
+                            val profileKeyInput = listOf(
+                                profile.id,
+                                profile.serverHost,
+                                profile.dnsttServerPublicKey.orEmpty(),
+                                dnsSource,
+                                if (dnsSource == "DEVICE") deviceDnsCandidates.joinToString("|") else "saved"
+                            ).joinToString("|")
+                            // Use a stable cryptographic digest instead of String.hashCode():
+                            // resume sessions must not collide for different DNS files/profiles.
+                            val profileKey = java.security.MessageDigest.getInstance("SHA-256")
+                                .digest(profileKeyInput.toByteArray(Charsets.UTF_8))
+                                .take(16)
+                                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
                             val sessionStartKey = "session_started_$profileKey"
                             var sessionStartedAt = resumePrefs.getLong(sessionStartKey, 0L)
                             if (sessionStartedAt <= 0L) {
