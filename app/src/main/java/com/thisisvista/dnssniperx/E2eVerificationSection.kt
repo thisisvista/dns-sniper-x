@@ -60,7 +60,8 @@ internal fun E2eVerificationSection(
     resolverDao: ResolverDao,
     historyDao: E2eHistoryDao,
     network: ActiveNetworkState,
-    enabled: Boolean
+    enabled: Boolean,
+    visible: Boolean = true
 ) {
     var resolverIp by rememberSaveable { mutableStateOf("") }
     var dnsSource by rememberSaveable { mutableStateOf("COLLECT") }
@@ -184,6 +185,7 @@ internal fun E2eVerificationSection(
         }
     }
 
+    if (visible) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
@@ -629,6 +631,7 @@ internal fun E2eVerificationSection(
                 }
             }
         }
+    }
     }
 }
 
