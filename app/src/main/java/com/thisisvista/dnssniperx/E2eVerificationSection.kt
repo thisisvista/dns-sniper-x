@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -11,6 +13,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +37,7 @@ import com.thisisvista.dnssniperx.data.E2eHistoryDao
 import com.thisisvista.dnssniperx.data.E2eVerificationCoordinator
 import com.thisisvista.dnssniperx.data.E2eVerificationMode
 import com.thisisvista.dnssniperx.data.ResolverDao
+import com.thisisvista.dnssniperx.data.ResolverListParser
 import com.thisisvista.dnssniperx.data.SlipNetE2eEngine
 import com.thisisvista.dnssniperx.data.SlipNetE2eExportFormatter
 import com.thisisvista.dnssniperx.data.SlipNetE2eExportRow
@@ -59,6 +63,9 @@ internal fun E2eVerificationSection(
     enabled: Boolean
 ) {
     var resolverIp by rememberSaveable { mutableStateOf("") }
+    var dnsSource by rememberSaveable { mutableStateOf("COLLECT") }
+    var deviceDnsFileName by rememberSaveable { mutableStateOf("") }
+    var deviceDnsCandidates by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var tunnelDomain by rememberSaveable { mutableStateOf("") }
     var publicKey by rememberSaveable { mutableStateOf("") }
     var running by rememberSaveable { mutableStateOf(false) }
@@ -78,6 +85,41 @@ internal fun E2eVerificationSection(
     var batchSkipped by rememberSaveable { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    LaunchedEffect(context) {
+        val prefs = context.getSharedPreferences("e2e_device_dns", Context.MODE_PRIVATE)
+        dnsSource = prefs.getString("source", "COLLECT") ?: "COLLECT"
+        deviceDnsFileName = prefs.getString("filename", "") ?: ""
+        deviceDnsCandidates = prefs.getString("entries", "").orEmpty()
+            .lineSequence().map { it.trim() }.filter { it.isNotBlank() }.distinct().toList()
+    }
+    val e2eTxtPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Could not read the selected TXT file.")
+                require(raw.length <= 1_000_000) { "TXT file is too large (maximum 1 MB)." }
+                val entries = ResolverListParser.parse(raw).map { it.address }.distinct()
+                require(entries.isNotEmpty()) { "No valid DNS addresses were found in this TXT file." }
+                val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                } ?: "Selected TXT file"
+                deviceDnsFileName = name
+                deviceDnsCandidates = entries
+                dnsSource = "DEVICE"
+                context.getSharedPreferences("e2e_device_dns", Context.MODE_PRIVATE).edit()
+                    .putString("source", "DEVICE")
+                    .putString("filename", name)
+                    .putString("entries", entries.joinToString("\n"))
+                    .apply()
+            }.onFailure { failure ->
+                status = "FILE_ERROR"
+                detail = failure.message ?: "Could not import DNS TXT file."
+            }
+        }
+    }
     val profiles by resolverDao.observeTunnelProfiles().collectAsState(initial = emptyList())
     val savedDnsttProfile = profiles.firstOrNull { it.protocol == TunnelProtocol.DNSTT.name }
         ?.let(TunnelProfileMapper::toModel)
@@ -149,12 +191,37 @@ internal fun E2eVerificationSection(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Real tunnel E2E test · DNSTT", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                "This test starts the DNSTT client and sends an HTTP request through its SOCKS5-forwarded tunnel. A DNS reply or a running client alone is never counted as success.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("DNS source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            listOf("COLLECT" to "Scan all working DNS from Collect tab", "DEVICE" to "Select DNS from your device").forEach { (key, label) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        dnsSource = key
+                        context.getSharedPreferences("e2e_device_dns", Context.MODE_PRIVATE).edit().putString("source", key).apply()
+                    }.padding(vertical = 5.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = dnsSource == key,
+                        onClick = {
+                            dnsSource = key
+                            context.getSharedPreferences("e2e_device_dns", Context.MODE_PRIVATE).edit().putString("source", key).apply()
+                        }
+                    )
+                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            if (dnsSource == "DEVICE") {
+                OutlinedButton(
+                    onClick = { e2eTxtPicker.launch(arrayOf("text/plain", "text/*", "application/octet-stream")) },
+                    enabled = !running,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (deviceDnsCandidates.isEmpty()) "Choose TXT file from device" else "Change TXT file") }
+                if (deviceDnsFileName.isNotBlank()) {
+                    Text("$deviceDnsFileName · ${deviceDnsCandidates.size} DNS", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+            } else {
+                Text("Working DNS saved in Collect will be used.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             OutlinedTextField(
                 value = resolverIp,
                 onValueChange = { resolverIp = it },
@@ -164,31 +231,31 @@ internal fun E2eVerificationSection(
                 enabled = !running,
                 modifier = Modifier.fillMaxWidth()
             )
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        loadingCandidates = true
-                        try {
-                            savedCandidates = resolverDao.getSlipNetExportBatch(limit = 15, offset = 0)
-                                .map { it.address }
-                                .distinct()
-                        } finally {
-                            loadingCandidates = false
-                        }
-                    }
-                },
-                enabled = !running && !loadingCandidates,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (loadingCandidates) "Loading saved DNS candidates…" else "Choose from saved working DNS")
-            }
-            savedCandidates.take(10).forEach { candidate ->
+            if (dnsSource == "COLLECT") {
                 OutlinedButton(
-                    onClick = { resolverIp = candidate },
-                    enabled = !running,
+                    onClick = {
+                        scope.launch {
+                            loadingCandidates = true
+                            try {
+                                savedCandidates = resolverDao.getSlipNetExportBatch(limit = 15, offset = 0)
+                                    .map { it.address }
+                                    .distinct()
+                            } finally {
+                                loadingCandidates = false
+                            }
+                        }
+                    },
+                    enabled = !running && !loadingCandidates,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(candidate)
+                    Text(if (loadingCandidates) "Loading saved DNS candidates…" else "Choose from saved working DNS")
+                }
+                savedCandidates.take(10).forEach { candidate ->
+                    OutlinedButton(
+                        onClick = { resolverIp = candidate },
+                        enabled = !running,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(candidate) }
                 }
             }
             OutlinedTextField(
@@ -314,7 +381,7 @@ internal fun E2eVerificationSection(
                             // The session start is stored locally and scoped to the exact
                             // DNSTT profile. It survives leaving this screen and app restarts.
                             val resumePrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
-                            val profileKey = listOf(profile.id, profile.serverHost, profile.dnsttServerPublicKey.orEmpty())
+                            val profileKey = listOf(profile.id, profile.serverHost, profile.dnsttServerPublicKey.orEmpty(), dnsSource, if (dnsSource == "DEVICE") deviceCandidates.joinToString("|").hashCode().toString() else "saved")
                                 .joinToString("|")
                                 .hashCode()
                                 .toUInt()
@@ -341,20 +408,23 @@ internal fun E2eVerificationSection(
                             // Count first, then read and process one Room page at a time.
                             // This avoids holding the complete resolver library in memory.
                             val pageSize = 100
-                            // Count the exact same paged query used below. This keeps the
-                            // progress denominator aligned with the candidate pages, including
-                            // SQLite's deduplication and endpoint filters, without loading all
-                            // resolver rows into memory.
-                            var countOffset = 0
-                            batchTotal = 0
-                            while (true) {
-                                val countPage = resolverDao.getSlipNetExportBatch(pageSize, countOffset)
-                                if (countPage.isEmpty()) break
-                                batchTotal += countPage.size
-                                countOffset += countPage.size
-                                if (countPage.size < pageSize) break
+                            val useDeviceList = dnsSource == "DEVICE"
+                            val deviceCandidates = deviceDnsCandidates.toList()
+                            if (useDeviceList) {
+                                require(deviceCandidates.isNotEmpty()) { "Choose a TXT file containing DNS addresses first." }
+                                batchTotal = deviceCandidates.size
+                            } else {
+                                var countOffset = 0
+                                batchTotal = 0
+                                while (true) {
+                                    val countPage = resolverDao.getSlipNetExportBatch(pageSize, countOffset)
+                                    if (countPage.isEmpty()) break
+                                    batchTotal += countPage.size
+                                    countOffset += countPage.size
+                                    if (countPage.size < pageSize) break
+                                }
                             }
-                            require(batchTotal > 0) { "No saved Working DNS candidates on UDP/TCP port 53 were found." }
+                            require(batchTotal > 0) { "No DNS candidates were found for E2E verification." }
 
                             val coordinator = E2eVerificationCoordinator(
                                 historyDao,
@@ -367,12 +437,15 @@ internal fun E2eVerificationSection(
                             detail = "Starting FULL HTTP verification for $batchTotal DNS resolvers (up to $concurrency at once)…"
                             var offset = 0
                             while (true) {
-                                val page = resolverDao.getSlipNetExportBatch(pageSize, offset)
+                                val page = if (useDeviceList) {
+                                    deviceCandidates.drop(offset).take(pageSize)
+                                } else {
+                                    resolverDao.getSlipNetExportBatch(pageSize, offset).map { it.address }
+                                }
                                 if (page.isEmpty()) break
 
                                 val pending = mutableListOf<String>()
-                                for (candidate in page) {
-                                    val address = candidate.address
+                                for (address in page) {
                                     // Resume skips every finished attempt from this session,
                                     // regardless of PASS/FAIL. A cancelled in-flight attempt is retried.
                                     val completedInSession = historyDao.hasCompletedBatchAttemptSince(
