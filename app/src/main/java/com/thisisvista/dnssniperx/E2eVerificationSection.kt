@@ -92,6 +92,20 @@ internal fun E2eVerificationSection(
         deviceDnsFileName = prefs.getString("filename", "") ?: ""
         deviceDnsCandidates = prefs.getString("entries", "").orEmpty()
             .lineSequence().map { it.trim() }.filter { it.isNotBlank() }.distinct().toList()
+
+        // Recover a batch interrupted by process death as a resumable session.
+        val batchPrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
+        if (batchPrefs.getString("ui_batch_status", "") == "BATCH_RUNNING") {
+            batchPrefs.edit()
+                .putString("ui_batch_status", "BATCH_PAUSED")
+                .putString("ui_batch_detail", "The previous run was interrupted. Resume to continue unfinished DNS entries.")
+                .apply()
+            status = "BATCH_PAUSED"
+            detail = "The previous run was interrupted. Completed results are saved; Resume continues with unfinished DNS entries."
+        } else {
+            status = batchPrefs.getString("ui_batch_status", status) ?: status
+            detail = batchPrefs.getString("ui_batch_detail", detail) ?: detail
+        }
     }
     val e2eTxtPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -365,6 +379,10 @@ internal fun E2eVerificationSection(
                         running = true
                         status = "BATCH_RUNNING"
                         detail = "Loading all saved Working DNS candidates…"
+                        context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
+                            .putString("ui_batch_status", "BATCH_RUNNING")
+                            .putString("ui_batch_detail", detail)
+                            .apply()
                         batchCompleted = 0
                         batchPassed = 0
                         batchFailed = 0
@@ -517,14 +535,26 @@ internal fun E2eVerificationSection(
                                 if (page.size < pageSize) break
                             }
                             status = "BATCH_COMPLETED"
-                            resumePrefs.edit().remove(sessionStartKey).apply()
+                            resumePrefs.edit()
+                                .remove(sessionStartKey)
+                                .putString("ui_batch_status", "BATCH_COMPLETED")
+                                .putString("ui_batch_detail", "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped.")
+                                .apply()
                             detail = "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped."
                         } catch (cancelled: CancellationException) {
                             status = "BATCH_PAUSED"
                             detail = "Paused at $batchCompleted/$batchTotal. Completed results are saved; Resume continues with unfinished DNS entries."
+                            context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
+                                .putString("ui_batch_status", status)
+                                .putString("ui_batch_detail", detail)
+                                .apply()
                         } catch (failure: Exception) {
                             status = "BATCH_ERROR"
                             detail = failure.message ?: failure.javaClass.simpleName
+                            context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
+                                .putString("ui_batch_status", status)
+                                .putString("ui_batch_detail", detail)
+                                .apply()
                         } finally {
                             running = false
                             batchJob = null
