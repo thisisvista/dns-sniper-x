@@ -923,7 +923,7 @@ private fun HomeContent(
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Manual DNS Scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Button(onClick = onImportFile, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            Text(if (isImporting) "Importing TXT…" else "Choose TXT file")
+            Text(if (isImporting) "Importing TXT…" else "Import TXT from device")
         }
         if (importedFileName.isNotBlank()) Text("Selected file: $importedFileName", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         if (isImporting && importProgress.isNotBlank()) {
