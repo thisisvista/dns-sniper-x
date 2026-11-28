@@ -355,6 +355,9 @@ internal fun E2eVerificationSection(
             }
             Button(
                 onClick = {
+                    if (running && batchJob != null) {
+                        batchJob?.cancel(CancellationException("Batch paused by user"))
+                    } else {
                     val job = scope.launch(start = CoroutineStart.LAZY) {
                         running = true
                         status = "BATCH_RUNNING"
@@ -526,12 +529,17 @@ internal fun E2eVerificationSection(
                     }
                     batchJob = job
                     job.start()
+                    }
                 },
-                enabled = enabled && !running && testJob == null && batchJob == null &&
-                    tunnelDomain.isNotBlank() && publicKey.length == 64,
+                enabled = (running && batchJob != null) || (enabled && !running && testJob == null && batchJob == null &&
+                    tunnelDomain.isNotBlank() && publicKey.length == 64),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Start / Resume FULL E2E for all Working DNS")
+                Text(when {
+                    running && batchJob != null -> "Pause E2E"
+                    status == "BATCH_PAUSED" -> "Resume E2E"
+                    else -> "Start E2E"
+                })
             }
             if (batchTotal > 0) {
                 Text(
@@ -539,14 +547,6 @@ internal fun E2eVerificationSection(
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold
                 )
-            }
-            if (running && batchJob != null) {
-                OutlinedButton(
-                    onClick = { batchJob?.cancel(CancellationException("Batch paused by user")) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Pause batch E2E")
-                }
             }
             if (running && testJob != null) {
                 OutlinedButton(
