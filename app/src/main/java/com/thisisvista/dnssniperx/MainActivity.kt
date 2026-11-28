@@ -791,18 +791,28 @@ private fun HomeContent(
         ) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Collect DNS Resources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        ResolverCollector.sources.forEach { source ->
+        ResolverCollector.sources.chunked(2).forEach { sourceRow ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Checkbox(
-                    checked = source.id in selectedSourceIds,
-                    onCheckedChange = { checked ->
-                        val updated = if (checked) selectedSourceIds + source.id else selectedSourceIds - source.id
-                        if (updated.isNotEmpty()) onSourceSelectionChange(updated)
-                    },
-                    enabled = !isCollecting && !isImporting && !isScanning
-                )
-                Column(modifier = Modifier.weight(1f).padding(top = 10.dp)) {
-                    Text(source.description, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                sourceRow.forEach { source ->
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = source.id in selectedSourceIds,
+                            onCheckedChange = { checked ->
+                                val updated = if (checked) selectedSourceIds + source.id else selectedSourceIds - source.id
+                                if (updated.isNotEmpty()) onSourceSelectionChange(updated)
+                            },
+                            enabled = !isCollecting && !isImporting && !isScanning
+                        )
+                        Text(
+                            source.description,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
             }
         }
