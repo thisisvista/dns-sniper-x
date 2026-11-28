@@ -784,6 +784,13 @@ private fun HomeContent(
         }
 
         if (selectedTab == "COLLECT") {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Collect DNS Resources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         ResolverCollector.sources.forEach { source ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Checkbox(
@@ -818,27 +825,6 @@ private fun HomeContent(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        Button(
-            onClick = { onScan(false, selectedScanSource) },
-            enabled = count > 0 && !isCollecting && !isImporting,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (isScanning) "Pause Scan" else if (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true)) "Resume Scan" else "Scan DNS (TCP, UDP)") }
-        if (isScanning || (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true))) {
-            val scanParts = scanProgress.split("/")
-            val scanDone = scanParts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
-            val scanTotal = scanParts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
-            val scanFraction = if (scanTotal > 0f) (scanDone / scanTotal).coerceIn(0f, 1f) else 0f
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { scanFraction },
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (isScanning) {
-                Text("Scanning", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                Text("Batch · Scanning DNS: $message", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Text("Paused · $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
         OutlinedButton(
             onClick = { showResetCollectionConfirmation = true },
             enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting,
@@ -860,6 +846,8 @@ private fun HomeContent(
                 }
             )
         }
+        }
+        }
 
         }
 
@@ -872,7 +860,14 @@ private fun HomeContent(
         )
 
         if (selectedTab == "COLLECT") {
-        Text("Scan source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Scan Working DNS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Scan source", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -887,6 +882,27 @@ private fun HomeContent(
             }
         }
         Button(
+            onClick = { onScan(false, selectedScanSource) },
+            enabled = count > 0 && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (isScanning) "Pause Scan" else if (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true)) "Resume Scan" else "Scan DNS (TCP, UDP)") }
+        if (isScanning || (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true))) {
+            val scanParts = scanProgress.split("/")
+            val scanDone = scanParts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+            val scanTotal = scanParts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+            val scanFraction = if (scanTotal > 0f) (scanDone / scanTotal).coerceIn(0f, 1f) else 0f
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { scanFraction },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (isScanning) {
+                Text("Scanning", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                Text("Batch · Scanning DNS: $message", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text("Paused · $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Button(
             onClick = { onScan(true, selectedScanSource) },
             enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
@@ -894,11 +910,18 @@ private fun HomeContent(
             Text("Retry unsuccessful / warnings")
         }
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-
+        }
+        }
         }
 
         if (selectedTab == "COLLECT") {
-        Text("Manual DNS workspace", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Manual DNS Scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Button(onClick = onImportFile, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text(if (isImporting) "Importing TXT…" else "Choose TXT file")
         }
@@ -920,7 +943,6 @@ private fun HomeContent(
         Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
             Text("Add pasted DNS to local library")
         }
-        Text("Manual scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("$manualResolverCount manual DNS entries in your library", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(
             onClick = { onScan(false, "MANUAL") },
@@ -949,6 +971,8 @@ private fun HomeContent(
                 }
             }
             if (manualResolverCount > manualResolvers.size) Text("Showing ${manualResolvers.size} of $manualResolverCount manual entries. Full list is in Results.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        }
         }
 
         }
