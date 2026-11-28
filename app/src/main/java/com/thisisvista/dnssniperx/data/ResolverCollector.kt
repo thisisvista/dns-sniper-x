@@ -46,7 +46,7 @@ object ResolverCollector {
         ResolverSource(
             "iran-public-dns-directory",
             "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/by-country/ir.txt",
-            "Iran public DNS directory"
+            "Iran Public DNS"
         ),
         ResolverSource(
             "public-dns-info",
@@ -61,7 +61,7 @@ object ResolverCollector {
         ResolverSource(
             "global-public-dns-directory",
             "https://raw.githubusercontent.com/trybyteful/public-dns-directory/main/resolvers/global/all.txt",
-            "Global public DNS directory"
+            "Global Public DNS"
         )
     )
 

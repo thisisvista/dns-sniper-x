@@ -63,7 +63,17 @@ android {
         buildConfig = true
     }
 
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        // Robolectric downloads Android framework jars at test runtime.
+        // Use Google's Maven Central mirror to avoid transient failures on repo1.maven.org.
+        unitTests.all {
+            it.systemProperty(
+                "robolectric.dependency.repo.url",
+                "https://maven-central.storage-download.googleapis.com/maven2"
+            )
+        }
+    }
 }
 
 kotlin {

@@ -4,17 +4,34 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#07111F" android:pathData="M0,0h108v108h-108z"/>
-    <path android:fillColor="#0B2032" android:pathData="M54,9a45,45 0,1 0,0 90a45,45 0,1 0,0 -90"/>
-    <path android:strokeColor="#00EBD2" android:strokeWidth="2.5" android:fillColor="#00000000" android:pathData="M54,13a41,41 0,1 0,0 82a41,41 0,1 0,0 -82"/>
-    <path android:strokeColor="#1D6E8D" android:strokeWidth="1.4" android:fillColor="#102C45" android:pathData="M54,22a32,32 0,1 0,0 64a32,32 0,1 0,0 -64"/>
-    <path android:strokeColor="#4BA9C9" android:strokeWidth="1.2" android:fillColor="#00000000" android:pathData="M22,54h64M54,22c-12,10 -12,54 0,64M54,22c12,10 12,54 0,64M28,38c16,8 36,8 52,0M28,70c16,-8 36,-8 52,0"/>
-    <path android:fillColor="#081522" android:strokeColor="#B7EAF4" android:strokeWidth="1.4" android:pathData="M18,47h42a5,5 0,0 1,5 5v9h-47z"/>
-    <path android:fillColor="#0A1E30" android:strokeColor="#8EDBEA" android:strokeWidth="1.4" android:pathData="M18,61h47v10h-47z"/>
-    <path android:fillColor="#0A1E30" android:strokeColor="#8EDBEA" android:strokeWidth="1.4" android:pathData="M18,73h47v10h-47z"/>
-    <path android:fillColor="#00EBD2" android:pathData="M25,53a2.5,2.5 0,1 0,0.01 0M35,53a2.5,2.5 0,1 0,0.01 0M25,66a2.5,2.5 0,1 0,0.01 0M35,66a2.5,2.5 0,1 0,0.01 0M25,78a2.5,2.5 0,1 0,0.01 0M35,78a2.5,2.5 0,1 0,0.01 0"/>
-    <path android:strokeColor="#B8EAF5" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M73,75L91,93"/>
-    <path android:fillColor="#0A233A" android:strokeColor="#C7F5FF" android:strokeWidth="2.8" android:pathData="M67,43a19,19 0,1 0,0 38a19,19 0,1 0,0 -38"/>
-    <path android:strokeColor="#00EBD2" android:strokeWidth="1.4" android:fillColor="#00000000" android:pathData="M67,47a15,15 0,1 0,0 30a15,15 0,1 0,0 -30"/>
-    <path android:strokeColor="#00EBD2" android:strokeWidth="1.4" android:fillColor="#00000000" android:pathData="M67,50v24M55,62h24"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Four diagonal circuit arms and terminal nodes -->
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="1.8"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M13,13 L28,13 L42,27 L34,35 L20,21 L20,36 M95,13 L80,13 L66,27 L74,35 L88,21 L88,36 M13,95 L28,95 L42,81 L34,73 L20,87 L20,72 M95,95 L80,95 L66,81 L74,73 L88,87 L88,72" />
+    <path android:fillColor="#B8B8B8" android:pathData="M10,10a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M25,10a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M92,10a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M77,10a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M10,98a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M25,98a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M92,98a3,3 0,1 0,6 0a3,3 0,1 0,-6 0 M77,98a3,3 0,1 0,6 0a3,3 0,1 0,-6 0" />
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="1.2"
+        android:strokeLineJoin="round"
+        android:pathData="M34,35 L42,27 L55,40 L48,47 Z M74,35 L66,27 L53,40 L60,47 Z M34,73 L42,81 L55,68 L48,61 Z M74,73 L66,81 L53,68 L60,61 Z" />
+
+    <!-- Scope ring and crosshair -->
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="2.2"
+        android:pathData="M54,25 A29,29 0,1 1,53.99 25" />
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="2"
+        android:strokeLineCap="square"
+        android:pathData="M54,17 L54,27 M54,81 L54,91 M17,54 L27,54 M81,54 L91,54" />
+
+    <!-- Layered central X -->
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="15"
+        android:strokeLineCap="square" android:pathData="M38,38 L70,70 M70,38 L38,70" />
+    <path android:fillColor="#111111" android:strokeColor="#111111" android:strokeWidth="10"
+        android:strokeLineCap="square" android:pathData="M38,38 L70,70 M70,38 L38,70" />
+    <path android:fillColor="#FFFFFF" android:strokeColor="#FFFFFF" android:strokeWidth="3.2"
+        android:strokeLineCap="square" android:pathData="M38,38 L70,70 M70,38 L38,70" />
+
+    <!-- Fine inner targeting chevrons -->
+    <path android:fillColor="#00000000" android:strokeColor="#777777" android:strokeWidth="1.8"
+        android:strokeLineJoin="round"
+        android:pathData="M42,31 L54,43 L66,31 M42,77 L54,65 L66,77 M31,42 L43,54 L31,66 M77,42 L65,54 L77,66" />
 </vector>

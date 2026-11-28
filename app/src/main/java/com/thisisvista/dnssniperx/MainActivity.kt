@@ -3,6 +3,7 @@ package com.thisisvista.dnssniperx
 import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
@@ -119,6 +120,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
     var selectedSourceIds by rememberSaveable { mutableStateOf(ResolverCollector.sources.map { it.id }) }
     var isImporting by rememberSaveable { mutableStateOf(false) }
     var importProgress by rememberSaveable { mutableStateOf("") }
+    var importedFileName by rememberSaveable { mutableStateOf("") }
+    var importSummary by rememberSaveable { mutableStateOf("") }
     var isScanning by rememberSaveable { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf("HOME") }
     var scanProgress by rememberSaveable { mutableStateOf("") }
@@ -225,6 +228,11 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
         if (uri != null) {
             scope.launch {
                 isImporting = true
+                importedFileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Selected TXT file"
+                importSummary = ""
                 var validCount = 0
                 var inserted = 0
                 var processedLines = 0
@@ -243,7 +251,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                             importProgress = "Processed $processedLines lines; saved $inserted new DNS entries…"
                         }
                     }
-                    val skipped = validCount - inserted
+                    val skipped = (validCount - inserted).coerceAtLeast(0)
+                    importSummary = "Parsed $validCount · Added $inserted · Duplicates skipped $skipped"
                     message = when {
                         validCount == 0 -> "No valid DNS entries found in the TXT file."
                         inserted == 0 -> "The file contained $validCount valid entries, but all were already saved."
@@ -251,9 +260,11 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                         else -> "Imported $inserted DNS entries from TXT successfully."
                     }
                 } catch (cancelled: CancellationException) {
+                    importSummary = "Import cancelled. Completed batches remain saved in your library."
                     message = "TXT import cancelled. Entries saved from completed batches remain in your library."
                     throw cancelled
                 } catch (exception: Exception) {
+                    importSummary = "Import stopped: ${exception.message ?: "Could not read file"}. Completed batches remain saved."
                     AppLogger.record(dao, context, "ERROR", "import", "TXT import failed", exception, stage = "read-and-parse")
                     message = "TXT import failed: ${exception.message ?: "Could not read file"}. Entries saved from completed batches remain in your library."
                 } finally {
@@ -336,6 +347,8 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
             },
             isImporting = isImporting,
             importProgress = importProgress,
+            importedFileName = importedFileName,
+            importSummary = importSummary,
             isScanning = isScanning,
             scanProgress = scanProgress,
             isDohTesting = isDohTesting,
@@ -491,18 +504,31 @@ private fun DnsSniperXApp(dao: ResolverDao, e2eHistoryDao: com.thisisvista.dnssn
                 }
             },
             onScan = { retryUnsuccessful, sourceFilter ->
-                val scanIntent = android.content.Intent(context, com.thisisvista.dnssniperx.data.DnsScanForegroundService::class.java)
-                if (isScanning) {
-                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_STOP
-                    context.startService(scanIntent)
-                } else {
-                    scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_START
-                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_RETRY_UNSUCCESSFUL, retryUnsuccessful)
-                    scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_SOURCE_FILTER, sourceFilter)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(scanIntent)
-                    } else {
+                val scanIntent = Intent(context, com.thisisvista.dnssniperx.data.DnsScanForegroundService::class.java)
+                try {
+                    if (isScanning) {
+                        scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_STOP
                         context.startService(scanIntent)
+                        message = "Stopping DNS scan…"
+                    } else {
+                        scanIntent.action = com.thisisvista.dnssniperx.data.DnsScanForegroundService.ACTION_START
+                        scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_RETRY_UNSUCCESSFUL, retryUnsuccessful)
+                        scanIntent.putExtra(com.thisisvista.dnssniperx.data.DnsScanForegroundService.EXTRA_SOURCE_FILTER, sourceFilter)
+                        message = "Starting scan…"
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.startForegroundService(scanIntent)
+                        } else {
+                            context.startService(scanIntent)
+                        }
+                    }
+                } catch (exception: Exception) {
+                    message = "Could not start DNS scan: ${exception.message ?: exception.javaClass.simpleName}"
+                    scope.launch {
+                        AppLogger.record(
+                            dao, context, "ERROR", "scan-service",
+                            "Could not start DNS scan service", exception,
+                            stage = "start"
+                        )
                     }
                 }
             },
@@ -577,6 +603,8 @@ private fun HomeContent(
     onResetCollectionProgress: () -> Unit,
     isImporting: Boolean,
     importProgress: String,
+    importedFileName: String,
+    importSummary: String,
     isScanning: Boolean,
     scanProgress: String,
     isDohTesting: Boolean,
@@ -615,8 +643,17 @@ private fun HomeContent(
     var untestedCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     var warningCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     var isLoadingResolvers by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var manualResolvers by androidx.compose.runtime.remember { mutableStateOf(emptyList<ResolverEntity>()) }
+    var manualResolverCount by androidx.compose.runtime.remember { mutableStateOf(0) }
     val pageSize = 100
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(selectedTab, resolverRefreshToken) {
+        if (selectedTab == "COLLECT") {
+            manualResolverCount = dao.countManualResolvers()
+            manualResolvers = dao.getManualResolverPage(limit = 8, offset = 0)
+        }
+    }
 
     LaunchedEffect(selectedTab, selectedFilter, resolverSearch, selectedNetworkType, selectedProviderLabel, fastestFirst, resolverRefreshToken) {
         isLoadingResolvers = true
@@ -692,6 +729,9 @@ private fun HomeContent(
                 Text("$count DNS entries saved on this device.", style = MaterialTheme.typography.bodyMedium)
             }
         }
+        Button(onClick = { onSelectedTabChange("COLLECT") }, modifier = Modifier.fillMaxWidth()) {
+            Text("Start Collecting")
+        }
 
         Text("Live overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         val overviewItems = listOf(
@@ -744,23 +784,35 @@ private fun HomeContent(
         }
 
         if (selectedTab == "COLLECT") {
-        Text("Discover public DNS lists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Choose sources, fetch DNS candidates, then scan them.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Public DNS sources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Select at least one source. Regional sources run first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ResolverCollector.sources.forEach { source ->
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Collect DNS Resources", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        ResolverCollector.sources.chunked(2).forEach { sourceRow ->
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Checkbox(
-                    checked = source.id in selectedSourceIds,
-                    onCheckedChange = { checked ->
-                        val updated = if (checked) selectedSourceIds + source.id else selectedSourceIds - source.id
-                        if (updated.isNotEmpty()) onSourceSelectionChange(updated)
-                    },
-                    enabled = !isCollecting && !isImporting && !isScanning
-                )
-                Column(modifier = Modifier.weight(1f).padding(top = 10.dp)) {
-                    Text(source.description, style = MaterialTheme.typography.bodyMedium)
-                    Text(source.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                sourceRow.forEach { source ->
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = source.id in selectedSourceIds,
+                            onCheckedChange = { checked ->
+                                val updated = if (checked) selectedSourceIds + source.id else selectedSourceIds - source.id
+                                if (updated.isNotEmpty()) onSourceSelectionChange(updated)
+                            },
+                            enabled = !isCollecting && !isImporting && !isScanning
+                        )
+                        Text(
+                            source.description,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
             }
         }
@@ -772,7 +824,7 @@ private fun HomeContent(
             if (isCollecting) {
                 CircularProgressIndicator(modifier = Modifier.height(18.dp), strokeWidth = 2.dp)
                 Text("  Fetching · ${maxOf(0, count - collectionStartCount)}")
-            } else Text("Fetch public DNS lists")
+            } else Text("Collect Public DNS lists")
         }
         if (isCollecting || hasCollectedInSession) {
             Text(
@@ -782,14 +834,6 @@ private fun HomeContent(
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
-        }
-        Button(
-            onClick = { onScan(false, selectedScanSource) },
-            enabled = count > 0 && !isCollecting && !isImporting,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (isScanning) "Pause scan" else "Scan / Resume") }
-        if (scanProgress.isNotBlank()) {
-            Text("Progress: $scanProgress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
         OutlinedButton(
             onClick = { showResetCollectionConfirmation = true },
@@ -812,24 +856,28 @@ private fun HomeContent(
                 }
             )
         }
+        }
+        }
 
         }
 
-        if (selectedTab == "E2E") {
         E2eVerificationSection(
             resolverDao = dao,
             historyDao = e2eHistoryDao,
             network = activeNetwork,
-            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting
+            enabled = !isCollecting && !isImporting && !isScanning && !isDohTesting && !isDotTesting,
+            visible = selectedTab == "E2E"
         )
 
-        }
-
         if (selectedTab == "COLLECT") {
-        Text("DNS network scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Checks saved DNS over UDP and TCP in small batches. Progress is saved so you can resume.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Scan source", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Choose which untested entries to scan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Scan Working DNS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Scan source", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -844,6 +892,27 @@ private fun HomeContent(
             }
         }
         Button(
+            onClick = { onScan(false, selectedScanSource) },
+            enabled = count > 0 && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (isScanning) "Pause Scan" else if (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true)) "Resume Scan" else "Scan DNS (TCP, UDP)") }
+        if (isScanning || (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true))) {
+            val scanParts = scanProgress.split("/")
+            val scanDone = scanParts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+            val scanTotal = scanParts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+            val scanFraction = if (scanTotal > 0f) (scanDone / scanTotal).coerceIn(0f, 1f) else 0f
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { scanFraction },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (isScanning) {
+                Text("Scanning", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                Text("Batch · Scanning DNS: $message", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text("Paused · $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Button(
             onClick = { onScan(true, selectedScanSource) },
             enabled = count > 0 && !isScanning && !isCollecting && !isImporting,
             modifier = Modifier.fillMaxWidth()
@@ -851,33 +920,69 @@ private fun HomeContent(
             Text("Retry unsuccessful / warnings")
         }
         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-
+        }
+        }
         }
 
         if (selectedTab == "COLLECT") {
-        Text("Import DNS addresses manually", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Paste one address per line. Supported: IP, IP:port, hostname, or [IPv6]:port. Port 53 is used when omitted.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Manual DNS Scan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Button(onClick = onImportFile, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            Text("Choose TXT file")
+            Text(if (isImporting) "Importing TXT…" else "Import TXT from device")
         }
+        if (importedFileName.isNotBlank()) Text("Selected file: $importedFileName", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         if (isImporting && importProgress.isNotBlank()) {
             Text(importProgress, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
         }
+        if (importSummary.isNotBlank()) Text(importSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         OutlinedTextField(
             value = importText,
             onValueChange = onImportTextChange,
             enabled = !isImporting,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            label = { Text("DNS addresses") },
+            minLines = 3,
+            label = { Text("Or paste DNS addresses") },
             placeholder = { Text("1.1.1.1\n8.8.8.8:53\n[2001:db8::1]:53") }
         )
         Button(onClick = onImport, enabled = importText.isNotBlank() && !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) {
-            Text("Import to local library")
+            Text("Add pasted DNS to local library")
+        }
+        Text("$manualResolverCount manual DNS entries in your library", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(
+            onClick = { onScan(false, "MANUAL") },
+            enabled = manualResolverCount > 0 && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (isScanning) "Pause Scan" else if (scanProgress.isNotBlank() && !message.contains("complete", ignoreCase = true)) "Resume Scan" else "Scan DNS (manual)") }
+        if (isScanning || scanProgress.isNotBlank()) {
+            Text(if (isScanning) "Scanning · $scanProgress" else "Paused · $scanProgress", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+        Text("Export actions include all saved working DNS, not only manual entries.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton(onClick = onExportHealthy, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export working DNS as TXT") }
+        OutlinedButton(onClick = onExportSlipNet, enabled = !isScanning && !isCollecting && !isImporting, modifier = Modifier.fillMaxWidth()) { Text("Export SlipNet-compatible DNS") }
+        OutlinedButton(
+            onClick = { onScan(true, "MANUAL") },
+            enabled = manualResolverCount > 0 && !isScanning && !isCollecting && !isImporting,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Retry manual failures / warnings") }
+        Text("Manual results", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        if (manualResolvers.isEmpty()) {
+            Text("No manual DNS entries yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            manualResolvers.forEach { resolver ->
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(formatResolverEndpoint(resolver.address, resolver.port), fontWeight = FontWeight.SemiBold)
+                    Text("UDP: ${friendlyProbeStatus(resolver.udpStatus)} · TCP: ${friendlyProbeStatus(resolver.tcpStatus)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (manualResolverCount > manualResolvers.size) Text("Showing ${manualResolvers.size} of $manualResolverCount manual entries. Full list is in Results.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        }
         }
 
         }
