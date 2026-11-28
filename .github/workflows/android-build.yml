@@ -222,7 +222,22 @@ jobs:
           emulator-boot-timeout: 1200
           disable-linux-hardware-acceleration: true
           disable-animations: true
-          script: adb shell cmd package list packages >/dev/null && ./gradlew connectedDebugAndroidTest
+          script: |
+            adb wait-for-device
+            for attempt in $(seq 1 60); do
+              if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')" = "1" ] && adb shell cmd package list packages >/dev/null 2>&1; then
+                break
+              fi
+              echo "Waiting for Android Package Manager ($attempt/60)…"
+              sleep 5
+            done
+            adb shell cmd package list packages >/dev/null
+            sleep 20
+            if ! ./gradlew connectedDebugAndroidTest; then
+              echo "Android instrumentation failed; collecting emulator diagnostics."
+              adb logcat -d -b all | tail -n 500 || true
+              exit 1
+            fi
 
       - name: Upload Android instrumentation and E2E reports
         if: always()
