@@ -36,6 +36,9 @@ interface E2eHistoryDao {
     """)
     fun observeNetworkAttempts(networkKey: String, limit: Int = 100): Flow<List<E2eHistoryEntity>>
 
+    @Query("SELECT * FROM e2e_history ORDER BY testedAt DESC, id DESC LIMIT :limit")
+    fun observeRecentAttempts(limit: Int = 10): Flow<List<E2eHistoryEntity>>
+
     @Query("SELECT COUNT(*) FROM e2e_history")
     fun observeAttemptCount(): Flow<Int>
 
