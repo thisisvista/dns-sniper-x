@@ -93,18 +93,31 @@ internal fun E2eVerificationSection(
         deviceDnsCandidates = prefs.getString("entries", "").orEmpty()
             .lineSequence().map { it.trim() }.filter { it.isNotBlank() }.distinct().toList()
 
-        // Recover a batch interrupted by process death as a resumable session.
         val batchPrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
-        if (batchPrefs.getString("ui_batch_status", "") == "BATCH_RUNNING") {
-            batchPrefs.edit()
-                .putString("ui_batch_status", "BATCH_PAUSED")
-                .putString("ui_batch_detail", "The previous run was interrupted. Resume to continue unfinished DNS entries.")
-                .apply()
-            status = "BATCH_PAUSED"
-            detail = "The previous run was interrupted. Completed results are saved; Resume continues with unfinished DNS entries."
-        } else {
-            status = batchPrefs.getString("ui_batch_status", status) ?: status
-            detail = batchPrefs.getString("ui_batch_detail", detail) ?: detail
+        status = batchPrefs.getString("ui_batch_status", status) ?: status
+        detail = batchPrefs.getString("ui_batch_detail", detail) ?: detail
+        batchTotal = batchPrefs.getInt("ui_batch_total", 0)
+        batchCompleted = batchPrefs.getInt("ui_batch_completed", 0)
+        batchPassed = batchPrefs.getInt("ui_batch_passed", 0)
+        batchFailed = batchPrefs.getInt("ui_batch_failed", 0)
+        batchSkipped = batchPrefs.getInt("ui_batch_skipped", 0)
+    }
+    LaunchedEffect(context) {
+        val batchPrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
+        while (true) {
+            val batchStatus = batchPrefs.getString("ui_batch_status", "") ?: ""
+            if (batchStatus.startsWith("BATCH_")) {
+                status = batchStatus
+                detail = batchPrefs.getString("ui_batch_detail", "") ?: ""
+                batchTotal = batchPrefs.getInt("ui_batch_total", 0)
+                batchCompleted = batchPrefs.getInt("ui_batch_completed", 0)
+                batchPassed = batchPrefs.getInt("ui_batch_passed", 0)
+                batchFailed = batchPrefs.getInt("ui_batch_failed", 0)
+                batchSkipped = batchPrefs.getInt("ui_batch_skipped", 0)
+                if (batchStatus == "BATCH_RUNNING") running = true
+                else if (running && testJob == null) running = false
+            }
+            kotlinx.coroutines.delay(600)
         }
     }
     val e2eTxtPicker = rememberLauncherForActivityResult(
@@ -372,212 +385,32 @@ internal fun E2eVerificationSection(
             }
             Button(
                 onClick = {
-                    if (running && batchJob != null) {
-                        batchJob?.cancel(CancellationException("Batch paused by user"))
+                    if (status == "BATCH_RUNNING") {
+                        val pauseIntent = android.content.Intent(context, com.thisisvista.dnssniperx.data.E2eBatchForegroundService::class.java)
+                            .setAction(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.ACTION_PAUSE)
+                        context.startService(pauseIntent)
                     } else {
-                    val job = scope.launch(start = CoroutineStart.LAZY) {
+                        val startIntent = android.content.Intent(context, com.thisisvista.dnssniperx.data.E2eBatchForegroundService::class.java)
+                            .setAction(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.ACTION_START)
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_PROFILE_ID, savedDnsttProfile?.id ?: "dnstt-e2e-manual")
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_PROFILE_NAME, savedDnsttProfile?.name ?: "DNSTT E2E test profile")
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_SERVER_HOST, tunnelDomain.trim())
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_SERVER_PORT, savedDnsttProfile?.serverPort ?: 53)
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_PUBLIC_KEY, publicKey.trim())
+                            .putExtra(com.thisisvista.dnssniperx.data.E2eBatchForegroundService.EXTRA_SOURCE, dnsSource)
+                        context.startForegroundService(startIntent)
                         running = true
                         status = "BATCH_RUNNING"
-                        detail = "Loading all saved Working DNS candidates…"
-                        context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
-                            .putString("ui_batch_status", "BATCH_RUNNING")
-                            .putString("ui_batch_detail", detail)
-                            .apply()
-                        batchCompleted = 0
-                        batchPassed = 0
-                        batchFailed = 0
-                        batchSkipped = 0
-                        try {
-                            val profile = TunnelProfile(
-                                id = savedDnsttProfile?.id ?: "dnstt-e2e-manual",
-                                name = savedDnsttProfile?.name ?: "DNSTT E2E test profile",
-                                protocol = TunnelProtocol.DNSTT,
-                                serverHost = tunnelDomain.trim(),
-                                serverPort = savedDnsttProfile?.serverPort ?: 53,
-                                dnsttServerPublicKey = publicKey.trim()
-                            )
-                            val errors = profile.validate()
-                            require(errors.isEmpty()) { errors.joinToString("; ") }
-                            resolverDao.saveTunnelProfile(
-                                TunnelProfileMapper.toEntity(profile, resolverDao.findTunnelProfile(profile.id))
-                            )
-
-                            // The session start is stored locally and scoped to the exact
-                            // DNSTT profile. It survives leaving this screen and app restarts.
-                            val resumePrefs = context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE)
-                            val profileKeyInput = listOf(
-                                profile.id,
-                                profile.serverHost,
-                                profile.dnsttServerPublicKey.orEmpty(),
-                                dnsSource,
-                                if (dnsSource == "DEVICE") deviceDnsCandidates.joinToString("|") else "saved"
-                            ).joinToString("|")
-                            // Use a stable cryptographic digest instead of String.hashCode():
-                            // resume sessions must not collide for different DNS files/profiles.
-                            val profileKey = java.security.MessageDigest.getInstance("SHA-256")
-                                .digest(profileKeyInput.toByteArray(Charsets.UTF_8))
-                                .take(16)
-                                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-                            val sessionStartKey = "session_started_$profileKey"
-                            var sessionStartedAt = resumePrefs.getLong(sessionStartKey, 0L)
-                            if (sessionStartedAt <= 0L) {
-                                sessionStartedAt = System.currentTimeMillis()
-                                resumePrefs.edit().putLong(sessionStartKey, sessionStartedAt).apply()
-                            }
-                            batchPassed = historyDao.countPassedBatchAttemptsSince(
-                                profile.serverPort, profile.id, profile.serverHost,
-                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
-                            )
-                            batchFailed = historyDao.countFailedBatchAttemptsSince(
-                                profile.serverPort, profile.id, profile.serverHost,
-                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
-                            )
-                            batchCompleted = historyDao.countCompletedBatchAttemptsSince(
-                                profile.serverPort, profile.id, profile.serverHost,
-                                profile.dnsttServerPublicKey.orEmpty(), sessionStartedAt
-                            )
-
-                            // Count first, then read and process one Room page at a time.
-                            // This avoids holding the complete resolver library in memory.
-                            val pageSize = 100
-                            val useDeviceList = dnsSource == "DEVICE"
-                            val deviceCandidates = deviceDnsCandidates.toList()
-                            if (useDeviceList) {
-                                require(deviceCandidates.isNotEmpty()) { "Choose a TXT file containing DNS addresses first." }
-                                batchTotal = deviceCandidates.size
-                            } else {
-                                var countOffset = 0
-                                batchTotal = 0
-                                while (true) {
-                                    val countPage = resolverDao.getSlipNetExportBatch(pageSize, countOffset)
-                                    if (countPage.isEmpty()) break
-                                    batchTotal += countPage.size
-                                    countOffset += countPage.size
-                                    if (countPage.size < pageSize) break
-                                }
-                            }
-                            require(batchTotal > 0) { "No DNS candidates were found for E2E verification." }
-
-                            val coordinator = E2eVerificationCoordinator(
-                                historyDao,
-                                mapOf(TunnelProtocol.DNSTT to (DnsttMobileE2eEngine() as SlipNetE2eEngine))
-                            )
-                            // Three simultaneous tunnels provide a useful speed-up while
-                            // keeping phone CPU, memory, and remote DNS server load bounded.
-                            // Each page is still fetched from Room in a bounded window.
-                            val concurrency = 3
-                            detail = "Starting FULL HTTP verification for $batchTotal DNS resolvers (up to $concurrency at once)…"
-                            var offset = 0
-                            while (true) {
-                                val page = if (useDeviceList) {
-                                    deviceCandidates.drop(offset).take(pageSize)
-                                } else {
-                                    resolverDao.getSlipNetExportBatch(pageSize, offset).map { it.address }
-                                }
-                                if (page.isEmpty()) break
-
-                                val pending = mutableListOf<String>()
-                                for (address in page) {
-                                    // Resume skips every finished attempt from this session,
-                                    // regardless of PASS/FAIL. A cancelled in-flight attempt is retried.
-                                    val completedInSession = historyDao.hasCompletedBatchAttemptSince(
-                                        address = address,
-                                        port = profile.serverPort,
-                                        profileId = profile.id,
-                                        serverHost = profile.serverHost,
-                                        publicKey = profile.dnsttServerPublicKey.orEmpty(),
-                                        sessionStartedAt = sessionStartedAt
-                                    )
-                                    val passedBeforeSession = historyDao.hasFullPassForProfile(
-                                        address = address,
-                                        port = profile.serverPort,
-                                        profileId = profile.id,
-                                        serverHost = profile.serverHost,
-                                        publicKey = profile.dnsttServerPublicKey.orEmpty()
-                                    )
-                                    if (completedInSession) {
-                                        // Counters were restored from the durable E2E history above.
-                                    } else if (passedBeforeSession) {
-                                        batchSkipped++
-                                        batchCompleted++
-                                    } else {
-                                        pending.add(address)
-                                    }
-                                }
-
-                                // Run small groups concurrently. Child coroutines inherit the UI
-                                // dispatcher for safe progress updates; the engine itself moves
-                                // network work to Dispatchers.IO. Cancellation still stops the
-                                // whole active group and each attempt records its cancellation.
-                                for (group in pending.chunked(concurrency)) {
-                                    resolverIp = group.first()
-                                    detail = "Testing ${batchCompleted + 1}–${batchCompleted + group.size}/$batchTotal (${group.size} in parallel)…"
-                                    coroutineScope {
-                                        group.map { address ->
-                                            async {
-                                                val result = coordinator.verify(
-                                                    resolverAddress = address,
-                                                    resolverPort = profile.serverPort,
-                                                    profile = profile,
-                                                    mode = E2eVerificationMode.FULL,
-                                                    network = network,
-                                                    timeoutMs = 25_000,
-                                                    verificationUrl = "http://www.gstatic.com/generate_204",
-                                                    expectedHttpStatusCode = 204,
-                                                    onPhase = { phase ->
-                                                        scope.launch { detail = "$address · $phase" }
-                                                    }
-                                                )
-                                                batchCompleted++
-                                                if (result.status.name == "FULL_PASS" && result.httpStatusCode == 204) {
-                                                    batchPassed++
-                                                } else {
-                                                    batchFailed++
-                                                }
-                                                status = "BATCH_RUNNING"
-                                            }
-                                        }.awaitAll()
-                                    }
-                                }
-                                offset += page.size
-                                if (page.size < pageSize) break
-                            }
-                            status = "BATCH_COMPLETED"
-                            resumePrefs.edit()
-                                .remove(sessionStartKey)
-                                .putString("ui_batch_status", "BATCH_COMPLETED")
-                                .putString("ui_batch_detail", "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped.")
-                                .apply()
-                            detail = "Finished: $batchPassed FULL_PASS · $batchFailed failed · $batchSkipped previously passed and skipped."
-                        } catch (cancelled: CancellationException) {
-                            status = "BATCH_PAUSED"
-                            detail = "Paused at $batchCompleted/$batchTotal. Completed results are saved; Resume continues with unfinished DNS entries."
-                            context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
-                                .putString("ui_batch_status", status)
-                                .putString("ui_batch_detail", detail)
-                                .apply()
-                        } catch (failure: Exception) {
-                            status = "BATCH_ERROR"
-                            detail = failure.message ?: failure.javaClass.simpleName
-                            context.getSharedPreferences("e2e_batch_resume", Context.MODE_PRIVATE).edit()
-                                .putString("ui_batch_status", status)
-                                .putString("ui_batch_detail", detail)
-                                .apply()
-                        } finally {
-                            running = false
-                            batchJob = null
-                        }
-                    }
-                    batchJob = job
-                    job.start()
+                        detail = "Starting E2E verification in the background…"
                     }
                 },
-                enabled = (running && batchJob != null) || (enabled && !running && testJob == null && batchJob == null &&
-                    tunnelDomain.isNotBlank() && publicKey.length == 64 && (dnsSource != "DEVICE" || deviceDnsCandidates.isNotEmpty())),
+                enabled = status == "BATCH_RUNNING" || (enabled && !running && testJob == null &&
+                    tunnelDomain.isNotBlank() && publicKey.length == 64 &&
+                    (dnsSource != "DEVICE" || deviceDnsCandidates.isNotEmpty())),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(when {
-                    running && batchJob != null -> "Pause E2E"
+                    status == "BATCH_RUNNING" -> "Pause E2E"
                     status == "BATCH_PAUSED" -> "Resume E2E"
                     else -> "Start E2E"
                 })
