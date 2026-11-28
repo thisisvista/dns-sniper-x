@@ -138,6 +138,7 @@ internal fun E2eVerificationSection(
         else historyDao.observeResolverAttempts(resolverIp.trim(), 53, 10)
     }
     val attempts by attemptsFlow.collectAsState(initial = emptyList())
+    val recentE2eAttempts by historyDao.observeRecentAttempts(8).collectAsState(initial = emptyList())
     val resolverListExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
@@ -541,12 +542,46 @@ internal fun E2eVerificationSection(
                     else -> "Start E2E"
                 })
             }
-            if (batchTotal > 0) {
-                Text(
-                    "Batch progress: $batchCompleted/$batchTotal · PASS $batchPassed · FAIL $batchFailed · skipped $batchSkipped",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Results", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (batchTotal > 0) {
+                        val fraction = (batchCompleted.toFloat() / batchTotal.toFloat()).coerceIn(0f, 1f)
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "$batchCompleted/$batchTotal · PASS $batchPassed · FAIL $batchFailed · skipped $batchSkipped",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (recentE2eAttempts.isEmpty()) {
+                        Text("No E2E results yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        recentE2eAttempts.forEach { attempt ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Text(attempt.resolverAddress, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                Text(
+                                    if (attempt.status == "FULL_PASS" && attempt.httpStatusCode == 204) "PASS" else attempt.status,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (attempt.status == "FULL_PASS" && attempt.httpStatusCode == 204) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
             if (running && testJob != null) {
                 OutlinedButton(
