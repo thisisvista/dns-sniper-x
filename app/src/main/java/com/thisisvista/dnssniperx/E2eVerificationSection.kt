@@ -114,8 +114,21 @@ internal fun E2eVerificationSection(
                 batchPassed = batchPrefs.getInt("ui_batch_passed", 0)
                 batchFailed = batchPrefs.getInt("ui_batch_failed", 0)
                 batchSkipped = batchPrefs.getInt("ui_batch_skipped", 0)
-                if (batchStatus == "BATCH_RUNNING") running = true
-                else if (running && testJob == null) running = false
+                if (batchStatus == "BATCH_RUNNING") {
+                    val heartbeat = batchPrefs.getLong("ui_batch_heartbeat", 0L)
+                    if (heartbeat > 0L && System.currentTimeMillis() - heartbeat > 20_000L) {
+                        val pausedDetail = "The background E2E service stopped unexpectedly. Resume to continue unfinished DNS entries."
+                        batchPrefs.edit()
+                            .putString("ui_batch_status", "BATCH_PAUSED")
+                            .putString("ui_batch_detail", pausedDetail)
+                            .apply()
+                        status = "BATCH_PAUSED"
+                        detail = pausedDetail
+                        if (testJob == null) running = false
+                    } else {
+                        running = true
+                    }
+                } else if (running && testJob == null) running = false
             }
             kotlinx.coroutines.delay(600)
         }
