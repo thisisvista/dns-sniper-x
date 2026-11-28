@@ -264,7 +264,7 @@ internal fun E2eVerificationSection(
             OutlinedTextField(
                 value = tunnelDomain,
                 onValueChange = { tunnelDomain = it },
-                label = { Text("DNSTT tunnel domain") },
+                label = { Text("Domain") },
                 placeholder = { Text("The domain configured on your DNSTT server") },
                 singleLine = true,
                 enabled = !running,
@@ -278,7 +278,7 @@ internal fun E2eVerificationSection(
             OutlinedTextField(
                 value = publicKey,
                 onValueChange = { publicKey = it.filter { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }.take(64) },
-                label = { Text("DNSTT server public key (64 hex characters)") },
+                label = { Text("Public key (64 hex characters)") },
                 singleLine = true,
                 enabled = !running,
                 modifier = Modifier.fillMaxWidth()
@@ -535,7 +535,7 @@ internal fun E2eVerificationSection(
                     }
                 },
                 enabled = (running && batchJob != null) || (enabled && !running && testJob == null && batchJob == null &&
-                    tunnelDomain.isNotBlank() && publicKey.length == 64),
+                    tunnelDomain.isNotBlank() && publicKey.length == 64 && (dnsSource != "DEVICE" || deviceDnsCandidates.isNotEmpty())),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(when {
