@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import com.thisisvista.dnssniperx.MainActivity
 import com.thisisvista.dnssniperx.R
 import kotlinx.coroutines.CancellationException
@@ -86,6 +87,11 @@ class E2eBatchForegroundService : Service() {
     }
 
     private suspend fun runBatch() {
+        val wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:E2eBatch").apply {
+                setReferenceCounted(false)
+                acquire(6 * 60 * 60 * 1000L)
+            }
         val dao = ResolverDatabase.getInstance(applicationContext).resolverDao()
         val historyDao = ResolverDatabase.getInstance(applicationContext).e2eHistoryDao()
         val monitor = ActiveNetworkMonitor(applicationContext)
@@ -243,6 +249,7 @@ class E2eBatchForegroundService : Service() {
                 prefs.getInt("ui_batch_failed", 0), prefs.getInt("ui_batch_skipped", 0))
         } finally {
             monitor.stop()
+            if (wakeLock.isHeld) wakeLock.release()
             batchJob = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
